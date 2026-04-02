@@ -14,16 +14,182 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alerts: {
+        Row: {
+          condition: string
+          created_at: string
+          id: string
+          pair: string
+          signal_id: string
+          status: string
+          triggered_at: string | null
+          user_id: string
+        }
+        Insert: {
+          condition: string
+          created_at?: string
+          id?: string
+          pair: string
+          signal_id: string
+          status?: string
+          triggered_at?: string | null
+          user_id: string
+        }
+        Update: {
+          condition?: string
+          created_at?: string
+          id?: string
+          pair?: string
+          signal_id?: string
+          status?: string
+          triggered_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          account_size: number | null
+          created_at: string
+          default_risk_pct: number | null
+          display_name: string | null
+          experience_level: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_size?: number | null
+          created_at?: string
+          default_risk_pct?: number | null
+          display_name?: string | null
+          experience_level?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_size?: number | null
+          created_at?: string
+          default_risk_pct?: number | null
+          display_name?: string | null
+          experience_level?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      signals: {
+        Row: {
+          ai_reasoning: string
+          confidence: number
+          created_at: string
+          direction: string
+          entry_price: number
+          id: string
+          pair: string
+          status: string
+          stop_loss: number
+          take_profit_1: number
+          take_profit_2: number | null
+          timeframe: string
+          verdict: string
+        }
+        Insert: {
+          ai_reasoning: string
+          confidence: number
+          created_at?: string
+          direction: string
+          entry_price: number
+          id?: string
+          pair: string
+          status?: string
+          stop_loss: number
+          take_profit_1: number
+          take_profit_2?: number | null
+          timeframe: string
+          verdict: string
+        }
+        Update: {
+          ai_reasoning?: string
+          confidence?: number
+          created_at?: string
+          direction?: string
+          entry_price?: number
+          id?: string
+          pair?: string
+          status?: string
+          stop_loss?: number
+          take_profit_1?: number
+          take_profit_2?: number | null
+          timeframe?: string
+          verdict?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_watchlist: {
+        Row: {
+          created_at: string
+          id: string
+          pair: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pair: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pair?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +316,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
