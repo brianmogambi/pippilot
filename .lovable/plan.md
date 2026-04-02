@@ -1,65 +1,51 @@
 
 
-# Phase 8 — Risk Calculator Page Rebuild
+# Phase 9 — Alerts Center Rebuild
 
 ## Current state
-Basic calculator with 4 inputs (account size, risk %, entry, SL) and 3 outputs (risk amount, SL distance, lot size). Simple component, no validation, no warnings, no educational content beyond a formula box.
+- Basic alerts list page with pending/triggered/expired status display
+- DB `alerts` table has: id, user_id, signal_id, pair, condition, status, type, title, message, severity, is_read, created_at, triggered_at
+- Missing: `timeframe` column in alerts table
+- No mark-as-read functionality, no filters, no link to related signal
 
 ## Plan
 
-### 1. Rebuild `src/components/calculator/RiskCalculator.tsx`
+### 1. Database migration
+Add `timeframe` column to `alerts` table (nullable text, default null) so alerts can reference the timeframe context.
 
-**Inputs section** (clean two-column grid):
-- Account Balance + Account Equity (side by side)
-- Account Currency (Select: USD, EUR, GBP, JPY, AUD, CAD, CHF)
-- Selected Pair (Select populated from `mockMarketData` symbols)
-- Entry Price + Stop Loss (side by side, auto-populates SL in pips)
-- Stop Loss in Pips (editable — syncs bidirectionally with SL price when pair selected)
-- Risk % per Trade (slider + input, default 1%, range 0.1–10%)
-- Fixed Amount Risk (optional input, overrides % calc when filled)
-- Current Open Risk (optional input — existing exposure in $)
-- Conservative Mode toggle (Switch — halves the calculated lot size, adds extra warnings)
+### 2. Seed sample alerts
+Insert ~8 sample alerts covering the 10 alert types (setup_forming, entry_zone_reached, confirmation_detected, move_sl_breakeven, take_partial, take_full_exit, setup_invalidated, volatility_spike, news_risk, over_risk) with varying severities and read/unread states, linked to the existing EUR/USD signal.
 
-**Validation**:
-- Entry and SL required, must differ
-- Risk % clamped 0.1–10
-- Account balance must be positive
-- SL pips auto-calculated or manually entered
-- Visual inline error messages
+### 3. Rebuild `src/pages/Alerts.tsx`
 
-**Outputs section** (prominent result card):
-- Maximum Money at Risk ($)
-- Estimated Lot Size (standard lots + mini/micro breakdown)
-- Pip Value (derived, placeholder logic — $10/pip for standard lot on USD pairs)
-- Estimated Exposure (lot size × 100,000 in account currency)
-- Warning badge if total open risk (current + new) exceeds 5% of balance
-- Warning badge if daily loss threshold (configurable, default 3%) is near/exceeded
+**Header section**: Title "Alert Center", subtitle, unread count badge.
 
-**Conservative mode**: When toggled on, halves lot size, shows "Conservative" badge, adds amber warning about why conservative is recommended for beginners.
+**Action bar**: 
+- "Mark All Read" button (updates all user's unread alerts via supabase)
+- Filter row: Type (multi-select or dropdown), Severity (all/info/warning/critical), Read state (all/unread/read), Pair filter
 
-### 2. Rebuild `src/pages/CalculatorPage.tsx`
+**Alert list**: Each alert card shows:
+- Type icon (mapped per alert type with distinct icons)
+- Severity indicator (color-coded left border: blue=info, amber=warning, red=critical)
+- Title, pair + timeframe badges, short message
+- Relative timestamp ("2m ago", "1h ago")
+- Unread dot indicator
+- "Mark Read" button per alert
+- "View Signal" button if signal_id exists (navigates to /signals and could open drawer)
 
-**Layout**: Two-column on desktop (left: calculator form + results; right: educational panels). Stacked on mobile.
+**States**: Loading skeletons, empty state, no-match filter state.
 
-**Educational panels** (right column):
-- "How Risk is Calculated" — step-by-step explanation with formula
-- "Why Smaller Risk Protects Your Account" — brief educational card
-- "Impact of Consecutive Losses" — table/visual showing account balance after 1–10 consecutive losses at 1%, 2%, 3% risk (e.g., 10 losses at 2% = ~18% drawdown vs 10 at 5% = ~40%)
+**Data**: Query `alerts` table, refetch on mutations via queryClient invalidation.
 
-### 3. Calculation logic
-
-Extract pure calculation functions into the component (structured for future extraction to a utility file):
-- `calculateRiskAmount(balance, riskPct, fixedAmount?)`
-- `calculatePipDistance(entry, sl, pipMultiplier)`
-- `calculateLotSize(riskAmount, pipDistance, pipValue)`
-- `calculateExposure(lotSize)`
-
-Pip multiplier: 10000 for most pairs, 100 for JPY pairs (detected from pair name).
+### 4. Notification preferences card (bottom section)
+A collapsible card at the bottom of the Alerts page showing current notification preferences with a link to Settings. Shows toggle states for future channels (In-App, Email, Push, Telegram) with "Coming Soon" badges on Email/Push/Telegram. In-App reads from profile `notifications_enabled`.
 
 ### Files to modify
-- `src/components/calculator/RiskCalculator.tsx` — full rebuild
-- `src/pages/CalculatorPage.tsx` — full rebuild with educational panels
+- `src/pages/Alerts.tsx` — full rebuild
 
-### No other files change
-No DB changes, no route changes.
+### Database changes
+- Migration: add `timeframe` text column to `alerts`
+- Seed: insert sample alert data
+
+### No route changes needed
 
