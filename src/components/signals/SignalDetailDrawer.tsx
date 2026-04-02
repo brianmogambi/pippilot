@@ -1,0 +1,237 @@
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import StatusBadge from "@/components/ui/status-badge";
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Ban,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Shield,
+  Zap,
+} from "lucide-react";
+import type { EnrichedSignal } from "@/pages/Signals";
+
+interface Props {
+  signal: EnrichedSignal | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props) {
+  if (!signal) return null;
+
+  const isLong = signal.direction === "long";
+  const isNoTrade = signal.verdict === "no_trade";
+  const analysis = signal.analysis;
+  const quality = analysis?.setupQuality ?? null;
+  const isAggressive = signal.confidence >= 75;
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader className="pb-4 border-b border-border">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-lg font-bold">{signal.pair}</SheetTitle>
+            <div className="flex items-center gap-2">
+              {quality && (
+                <StatusBadge variant={quality === "A+" || quality === "A" ? "bullish" : quality === "B" ? "neutral" : "bearish"}>
+                  {quality}
+                </StatusBadge>
+              )}
+              <StatusBadge
+                variant={
+                  signal.status === "active" ? "active"
+                  : signal.status === "triggered" ? "triggered"
+                  : signal.status === "invalidated" ? "bearish"
+                  : "expired"
+                }
+              >
+                {signal.status}
+              </StatusBadge>
+            </div>
+          </div>
+          <SheetDescription className="flex items-center gap-2 mt-1">
+            {isNoTrade ? (
+              <span className="flex items-center gap-1 text-warning font-medium">
+                <Ban className="h-3.5 w-3.5" /> No Trade
+              </span>
+            ) : (
+              <span className={`flex items-center gap-1 font-medium ${isLong ? "text-bullish" : "text-bearish"}`}>
+                {isLong ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                {isLong ? "Long" : "Short"}
+              </span>
+            )}
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{signal.timeframe}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className={`text-xs font-medium ${isAggressive ? "text-warning" : "text-primary"}`}>
+              {isAggressive ? (
+                <span className="flex items-center gap-1"><Zap className="h-3 w-3" /> Aggressive</span>
+              ) : (
+                <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Conservative</span>
+              )}
+            </span>
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5 pt-5">
+          {/* No Trade Warning */}
+          {isNoTrade && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Ban className="h-4 w-4 text-warning" />
+                <span className="font-semibold text-warning text-sm">No Trade Recommended</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {analysis?.noTradeReason || signal.ai_reasoning}
+              </p>
+            </div>
+          )}
+
+          {/* Price Levels */}
+          <Section title="Price Levels">
+            <div className="grid grid-cols-2 gap-3">
+              <LevelRow label="Entry" value={signal.entry_price} />
+              <LevelRow label="Stop Loss" value={signal.stop_loss} className="text-bearish" />
+              <LevelRow label="TP1" value={signal.take_profit_1} className="text-bullish" />
+              <LevelRow label="TP2" value={signal.take_profit_2 ?? "—"} className="text-bullish" />
+              <LevelRow label="TP3" value={signal.take_profit_3 ?? "—"} className="text-bullish" />
+              <LevelRow label="R:R" value={`${signal.riskReward}R`} />
+            </div>
+          </Section>
+
+          {/* Setup Info */}
+          <Section title="Setup Info">
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Setup Type</span>
+                <span className="text-foreground font-medium">{signal.setup_type || analysis?.setupType || "—"}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Confidence</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-16 bg-muted rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${signal.confidence >= 70 ? "bg-bullish" : signal.confidence >= 50 ? "bg-warning" : "bg-bearish"}`}
+                      style={{ width: `${signal.confidence}%` }}
+                    />
+                  </div>
+                  <span className="text-foreground font-medium">{signal.confidence}%</span>
+                </div>
+              </div>
+              {analysis?.entryZone && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Entry Zone</span>
+                  <span className="text-foreground font-mono">{analysis.entryZone[0]} – {analysis.entryZone[1]}</span>
+                </div>
+              )}
+            </div>
+          </Section>
+
+          {/* AI Explanation */}
+          {analysis && (
+            <Section title="AI Explanation">
+              <Tabs defaultValue="beginner" className="w-full">
+                <TabsList className="w-full h-8">
+                  <TabsTrigger value="beginner" className="text-xs flex-1">Beginner</TabsTrigger>
+                  <TabsTrigger value="expert" className="text-xs flex-1">Expert</TabsTrigger>
+                </TabsList>
+                <TabsContent value="beginner" className="mt-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">{analysis.beginnerExplanation}</p>
+                </TabsContent>
+                <TabsContent value="expert" className="mt-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">{analysis.expertExplanation}</p>
+                </TabsContent>
+              </Tabs>
+            </Section>
+          )}
+
+          {/* Reasons For / Against */}
+          {analysis && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-bullish flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3" /> Reasons For
+                </h4>
+                <ul className="space-y-1">
+                  {analysis.reasonsFor.map((r, i) => (
+                    <li key={i} className="text-[11px] text-muted-foreground pl-3 relative before:absolute before:left-0 before:top-1.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-bullish/40">
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-bearish flex items-center gap-1">
+                  <XCircle className="h-3 w-3" /> Reasons Against
+                </h4>
+                <ul className="space-y-1">
+                  {analysis.reasonsAgainst.map((r, i) => (
+                    <li key={i} className="text-[11px] text-muted-foreground pl-3 relative before:absolute before:left-0 before:top-1.5 before:w-1.5 before:h-1.5 before:rounded-full before:bg-bearish/40">
+                      {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Fallback reasoning when no analysis */}
+          {!analysis && (
+            <Section title="AI Reasoning">
+              <p className="text-xs text-muted-foreground leading-relaxed">{signal.ai_reasoning}</p>
+            </Section>
+          )}
+
+          {/* Invalidation */}
+          <Section title="Invalidation">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {signal.invalidation_reason || analysis?.invalidation || "No invalidation condition specified."}
+            </p>
+          </Section>
+
+          {/* Management Plan */}
+          <Section title="Management Plan">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Scale out at TP1, move SL to breakeven, trail to TP2/TP3. Reduce position size if confidence is below 60%.
+            </p>
+          </Section>
+
+          {/* Warning footer */}
+          <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-start gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-warning mt-0.5 shrink-0" />
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              This is AI-generated analysis for educational purposes only. Always do your own research and manage your risk. Past performance does not guarantee future results.
+            </p>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-semibold text-foreground uppercase tracking-wider">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function LevelRow({ label, value, className }: { label: string; value: string | number; className?: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className={`text-xs font-mono font-medium ${className || "text-foreground"}`}>{value}</span>
+    </div>
+  );
+}
