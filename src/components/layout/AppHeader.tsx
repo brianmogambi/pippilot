@@ -1,6 +1,8 @@
 import { useLocation } from "react-router-dom";
 import { Bell, Wallet } from "lucide-react";
-import { mockAccountStats, mockNotifications } from "@/data/mockSignals";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -14,8 +16,28 @@ const routeTitles: Record<string, string> = {
 
 export default function AppHeader() {
   const { pathname } = useLocation();
+  const { user, profile } = useAuth();
   const title = routeTitles[pathname] || "PipPilot AI";
-  const unread = mockNotifications.filter((n) => !n.read).length;
+
+  const { data: account } = useQuery({
+    queryKey: ["trading-account", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("trading_accounts").select("balance, equity").eq("is_default", true).maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["unread-alerts", user?.id],
+    queryFn: async () => {
+      const { count } = await supabase.from("alerts").select("id", { count: "exact", head: true }).eq("is_read", false);
+      return count ?? 0;
+    },
+    enabled: !!user,
+  });
+
+  const initials = (profile?.display_name ?? user?.email ?? "P").charAt(0).toUpperCase();
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-card/80 backdrop-blur-md px-4 md:px-6 h-14">
@@ -27,27 +49,24 @@ export default function AppHeader() {
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Account chip */}
         <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-1.5">
           <Wallet className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-medium text-foreground">${mockAccountStats.balance.toLocaleString()}</span>
+          <span className="text-xs font-medium text-foreground">${Number(account?.balance ?? 10000).toLocaleString()}</span>
           <span className="text-[10px] text-muted-foreground">|</span>
-          <span className="text-xs text-muted-foreground">Eq ${mockAccountStats.equity.toLocaleString()}</span>
+          <span className="text-xs text-muted-foreground">Eq ${Number(account?.equity ?? 10000).toLocaleString()}</span>
         </div>
 
-        {/* Notifications */}
         <button className="relative p-1.5 rounded-md hover:bg-accent transition-colors">
           <Bell className="h-4 w-4 text-muted-foreground" />
-          {unread > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-              {unread}
+              {unreadCount}
             </span>
           )}
         </button>
 
-        {/* Avatar */}
         <div className="h-7 w-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary">
-          P
+          {initials}
         </div>
       </div>
     </header>
