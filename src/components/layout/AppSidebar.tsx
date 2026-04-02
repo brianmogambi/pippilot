@@ -6,7 +6,9 @@ import {
   Bell,
   Settings,
   Activity,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -18,7 +20,7 @@ const navItems = [
 
 export default function AppSidebar() {
   const { pathname } = useLocation();
-
+  const { signOut } = useAuth();
   return (
     <aside className="hidden md:flex flex-col w-64 border-r border-border bg-sidebar min-h-screen p-4 gap-2">
       <Link to="/" className="flex items-center gap-2 px-3 py-4 mb-4">
@@ -48,10 +50,19 @@ export default function AppSidebar() {
         })}
       </nav>
 
-      <div className="mt-auto p-3 rounded-lg bg-accent/50 border border-border">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          ⚠️ AI-assisted analysis only. Not financial advice. Always manage your risk.
-        </p>
+      <div className="mt-auto space-y-2">
+        <button
+          onClick={signOut}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors w-full"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </button>
+        <div className="p-3 rounded-lg bg-accent/50 border border-border">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            ⚠️ AI-assisted analysis only. Not financial advice. Always manage your risk.
+          </p>
+        </div>
       </div>
     </aside>
   );
