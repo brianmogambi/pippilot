@@ -13,7 +13,7 @@ import { mockMarketData } from "@/data/mockMarketData";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF"] as const;
 
-const PAIRS = Object.keys(marketData);
+const PAIRS = Object.keys(mockMarketData);
 
 function isJpyPair(pair: string) {
   return pair.includes("JPY");
