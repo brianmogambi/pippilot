@@ -1,77 +1,51 @@
 
 
-# Phase 3 — Database Schema Expansion
+# Phase 4 — Premium Dashboard Rebuild
 
 ## Current state
-Five tables exist: `profiles` (with onboarding fields), `signals`, `alerts`, `user_watchlist`, `user_roles`. Pages use mock data for journal, watchlist prices, and market summary.
+The Dashboard (`Index.tsx`) already queries `trading_accounts`, `user_risk_profiles`, `signals`, `alerts`, and `trade_journal_entries` from the database. It uses `mockMarketSummary` for market watch. The layout has stat cards, signal cards, alerts list, watchlist, journal, and a disclaimer. It works but lacks the requested sections (daily P/L, risk remaining, volatility badges, beginner insight card, signal table view, severity/unread indicators on alerts, journal performance summary).
 
-## Approach
-Rather than replacing everything, we evolve the existing schema — add new tables where needed, expand existing ones, and keep what works. Some requested entities (e.g. `notification_preferences`, `strategy_preferences`) are already covered by columns in `profiles` and don't need separate tables at MVP scale.
+## What changes
 
----
+Rebuild `src/pages/Index.tsx` with 6 distinct sections in a premium card-based layout:
 
-## Migration plan (single SQL migration)
+### 1. Account Overview (top row — 5 stat cards)
+- Balance, Equity, Daily P/L (placeholder: equity - balance), Risk Used Today (placeholder 0%), Remaining Daily Risk (max_daily_loss_pct - used)
+- Enhance `StatCard` to support a `variant` prop for subtle background tints (e.g. warning when risk is high)
 
-### 1. New table: `trading_accounts`
-Separates account financials from profile preferences.
-- `id`, `user_id`, `account_name` (default 'Primary'), `account_currency`, `balance`, `equity`, `leverage` (nullable), `broker_name` (nullable), `is_default` (boolean, default true), `created_at`, `updated_at`
-- RLS: users CRUD own rows
+### 2. Market Watch Summary
+- Uses user's watchlist pairs from `user_watchlist` table, falls back to `mockMarketSummary` for prices
+- Each pair card shows: pair name, price (mock), trend badge (bullish/bearish/neutral from mock data), volatility badge (placeholder: "Low"/"Med"/"High" derived from changePct), signal status badge (cross-reference active signals)
+- Compact horizontal scrollable row or grid
 
-### 2. New table: `user_risk_profiles`
-Dedicated risk management settings per user.
-- `id`, `user_id` (unique — one per user), `risk_per_trade_pct`, `max_daily_loss_pct`, `max_total_open_risk_pct` (default 10), `conservative_mode` (boolean, default false), `created_at`, `updated_at`
-- RLS: users CRUD own row
+### 3. Active Trade Ideas (table-style card)
+- Query active signals, display as a compact table with columns: Pair, Direction, Setup Type, Entry, SL, TP1, Confidence bar, Status badge
+- Empty state: "No active trade ideas. Check back soon."
+- Link to /signals
 
-### 3. New table: `instruments`
-Reference table of tradeable pairs.
-- `id`, `symbol` (unique, e.g. "EUR/USD"), `base_currency`, `quote_currency`, `instrument_type` (default 'forex'), `pip_value` (numeric), `is_active` (boolean, default true), `created_at`
-- RLS: all authenticated can SELECT; admins can INSERT/UPDATE
+### 4. Alerts Feed
+- Query alerts ordered by created_at desc, limit 5
+- Show: severity icon (color-coded info/warning/critical), title or pair, message, timestamp (relative), unread dot indicator (`is_read` field)
+- Empty state: "All clear — no alerts."
 
-### 4. New table: `trade_journal_entries`
-Full journal with result tracking.
-- `id`, `user_id`, `pair`, `direction`, `entry_price`, `exit_price` (nullable), `stop_loss` (nullable), `take_profit` (nullable), `result_pips` (nullable), `result_amount` (nullable), `lot_size` (nullable), `notes` (nullable), `followed_plan` (boolean, default true), `status` ('open'/'closed', default 'open'), `opened_at`, `closed_at` (nullable), `created_at`, `updated_at`
-- RLS: users CRUD own rows
+### 5. Journal Snapshot
+- Last 3 journal entries (already queried)
+- Add a mini performance summary row above: Total Trades, Win Rate, Avg P/L (computed from all journal entries via a separate query)
+- Empty state: "Start logging trades to track your performance."
 
-### 5. Expand `signals` table → add setup fields
-Add columns to existing `signals`:
-- `take_profit_3` (numeric, nullable)
-- `setup_type` (text, nullable — e.g. 'breakout', 'reversal', 'continuation')
-- `invalidation_reason` (text, nullable)
-- `created_by_ai` (boolean, default true)
-- `updated_at` (timestamptz, default now())
-
-### 6. Expand `alerts` table → richer notifications
-Add columns to existing `alerts`:
-- `type` (text, default 'price' — price/signal/risk/system)
-- `title` (text, nullable)
-- `message` (text, nullable)
-- `severity` (text, default 'info' — info/warning/critical)
-- `is_read` (boolean, default false)
-
-### 7. Seed `instruments` table
-Insert major and minor forex pairs (~15 instruments) with correct pip values.
-
-### 8. Auto-create risk profile on signup
-Update the `handle_new_user()` trigger function to also create a `user_risk_profiles` row and a default `trading_accounts` row, pulling defaults from the profile's onboarding data.
-
----
-
-## Code changes
+### 6. Beginner Insight Card (new)
+- A visually distinct card with a lightbulb icon
+- Rotating educational tips (hardcoded array, pick one based on day)
+- Example: "A good trade setup needs structure, confirmation, and acceptable risk."
+- Subtle gradient border, different from other cards
 
 ### Files to modify
-- **`src/pages/Journal.tsx`** — Query `trade_journal_entries` from DB instead of mock data; wire "Add Entry" button to an insert form/dialog
-- **`src/pages/Alerts.tsx`** — Query `alerts` from DB; use new `title`, `message`, `severity`, `is_read` fields
-- **`src/pages/Watchlist.tsx`** — Query `user_watchlist` from DB; add/remove pairs with real mutations
-- **`src/pages/Index.tsx`** — Pull account stats from `trading_accounts` + `user_risk_profiles` via AuthContext or direct queries
-- **`src/contexts/AuthContext.tsx`** — Optionally expose `tradingAccount` and `riskProfile` alongside `profile`
-- **`src/components/layout/AppHeader.tsx`** — Use real balance/equity from trading account
+- `src/pages/Index.tsx` — full rebuild with the 6 sections above
+- `src/components/ui/stat-card.tsx` — add optional `variant` prop for tinted backgrounds
 
 ### Files to create
-- **`src/components/journal/JournalEntryForm.tsx`** — Dialog form for adding/editing journal entries
+- None needed — all sections go directly in Index.tsx using existing components (StatCard, StatusBadge, SignalCard or inline table)
 
-## What stays the same
-- `profiles` table keeps its current columns (display_name, experience_level, trading_style, preferred_pairs, preferred_sessions, timezone, notifications_enabled, onboarding_completed) — these serve as strategy/notification preferences without needing separate tables
-- `user_roles` — unchanged
-- Auth flow, onboarding, settings — unchanged
-- Mock market summary data stays (no live price feed in V1)
+### No database changes needed
+All required tables and fields already exist. Mock market data stays for V1.
 
