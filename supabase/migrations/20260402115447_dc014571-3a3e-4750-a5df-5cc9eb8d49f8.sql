@@ -1,0 +1,1 @@
+UPDATE profiles SET onboarding_completed = true WHERE user_id = 'bc343da0-4a10-4fa2-a032-77f5d4f86f50';
