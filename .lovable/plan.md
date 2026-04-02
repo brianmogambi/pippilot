@@ -1,51 +1,85 @@
 
 
-# Phase 4 — Premium Dashboard Rebuild
+# Phase 5 — Watchlist Page Rebuild
 
 ## Current state
-The Dashboard (`Index.tsx`) already queries `trading_accounts`, `user_risk_profiles`, `signals`, `alerts`, and `trade_journal_entries` from the database. It uses `mockMarketSummary` for market watch. The layout has stat cards, signal cards, alerts list, watchlist, journal, and a disclaimer. It works but lacks the requested sections (daily P/L, risk remaining, volatility badges, beginner insight card, signal table view, severity/unread indicators on alerts, journal performance summary).
+`Watchlist.tsx` is a basic page: select a pair from instruments, add/remove from `user_watchlist`, display in a simple 3-column table (Pair, Added, Delete). No mock market data, no filters, no pair detail navigation.
 
 ## What changes
 
-Rebuild `src/pages/Index.tsx` with 6 distinct sections in a premium card-based layout:
+Full rebuild of `src/pages/Watchlist.tsx` into a professional market watch screen, plus a new `PairDetail` page.
 
-### 1. Account Overview (top row — 5 stat cards)
-- Balance, Equity, Daily P/L (placeholder: equity - balance), Risk Used Today (placeholder 0%), Remaining Daily Risk (max_daily_loss_pct - used)
-- Enhance `StatCard` to support a `variant` prop for subtle background tints (e.g. warning when risk is high)
+### 1. Mock market data layer
+Create `src/data/mockMarketData.ts` — a lookup map keyed by symbol providing:
+- `price`, `spread`, `dailyChange`, `dailyChangePct`
+- `atr` (placeholder numeric), `volatility` ("Low"/"Med"/"High")
+- `trendH1`, `trendH4`, `trendD1` ("bullish"/"bearish"/"neutral")
+- `activeSession` ("London"/"New York"/"Asia"/"Closed")
+- `newsRisk` (boolean — upcoming high-impact news flag)
+- Covers all seeded instruments (~15 pairs)
 
-### 2. Market Watch Summary
-- Uses user's watchlist pairs from `user_watchlist` table, falls back to `mockMarketSummary` for prices
-- Each pair card shows: pair name, price (mock), trend badge (bullish/bearish/neutral from mock data), volatility badge (placeholder: "Low"/"Med"/"High" derived from changePct), signal status badge (cross-reference active signals)
-- Compact horizontal scrollable row or grid
+### 2. Watchlist page rebuild (`src/pages/Watchlist.tsx`)
+**Header area:**
+- Title + subtitle
+- Search input (filters table by pair name)
+- Add pair dropdown + button (existing logic, retained)
 
-### 3. Active Trade Ideas (table-style card)
-- Query active signals, display as a compact table with columns: Pair, Direction, Setup Type, Entry, SL, TP1, Confidence bar, Status badge
-- Empty state: "No active trade ideas. Check back soon."
-- Link to /signals
+**Filter bar:**
+- Favorites only toggle (show only `user_watchlist` pairs vs all instruments)
+- Signal status filter: All / Active Signal / No Signal
+- Session filter: All / London / New York / Asia
+- Trend direction: All / Bullish / Bearish / Neutral (based on H4 trend)
+- Volatility: All / Low / Med / High
+- Implemented as a row of small `Select` dropdowns
 
-### 4. Alerts Feed
-- Query alerts ordered by created_at desc, limit 5
-- Show: severity icon (color-coded info/warning/critical), title or pair, message, timestamp (relative), unread dot indicator (`is_read` field)
-- Empty state: "All clear — no alerts."
+**Table columns:**
+- Star icon (favorite/unfavorite — toggles `user_watchlist` membership)
+- Pair name
+- Price (from mock data)
+- Spread (mock)
+- Daily Change + Change % (color-coded)
+- ATR / Volatility badge (Low/Med/High with StatusBadge)
+- Session status badge
+- Trend summary (H1/H4/D1 arrows or badges, compact)
+- Signal status badge (cross-reference active signals from DB)
+- News risk flag icon (warning triangle if `newsRisk` is true)
+- Row is clickable → navigates to `/watchlist/:pair`
 
-### 5. Journal Snapshot
-- Last 3 journal entries (already queried)
-- Add a mini performance summary row above: Total Trades, Win Rate, Avg P/L (computed from all journal entries via a separate query)
-- Empty state: "Start logging trades to track your performance."
+**Data flow:**
+- Query `instruments` for full pair list
+- Query `user_watchlist` for favorites
+- Query `signals` (active) for signal status cross-reference
+- Merge with mock market data map
+- Apply filters client-side
 
-### 6. Beginner Insight Card (new)
-- A visually distinct card with a lightbulb icon
-- Rotating educational tips (hardcoded array, pick one based on day)
-- Example: "A good trade setup needs structure, confirmation, and acceptable risk."
-- Subtle gradient border, different from other cards
+**States:** Loading skeleton rows, empty state when no instruments match filters.
 
-### Files to modify
-- `src/pages/Index.tsx` — full rebuild with the 6 sections above
-- `src/components/ui/stat-card.tsx` — add optional `variant` prop for tinted backgrounds
+### 3. Pair Detail page (`src/pages/PairDetail.tsx`)
+A dedicated page at `/watchlist/:pair` showing:
+- Pair name + favorite toggle
+- Price, spread, daily change (from mock data)
+- Trend summary cards (H1, H4, D1 — each with direction badge)
+- Volatility / ATR card
+- Session status
+- News risk indicator
+- Active signals for this pair (query `signals` filtered by pair)
+- Recent journal entries for this pair
+- Placeholder chart area (empty card with "Chart coming soon")
+- Back link to watchlist
 
-### Files to create
-- None needed — all sections go directly in Index.tsx using existing components (StatCard, StatusBadge, SignalCard or inline table)
+### 4. Route addition
+Add `/watchlist/:pair` route in `App.tsx` pointing to `PairDetail`.
 
-### No database changes needed
-All required tables and fields already exist. Mock market data stays for V1.
+---
+
+## Files to create
+- `src/data/mockMarketData.ts` — mock price/spread/ATR/trend/session/news data
+- `src/pages/PairDetail.tsx` — pair detail view
+
+## Files to modify
+- `src/pages/Watchlist.tsx` — full rebuild with filters, rich table, search
+- `src/App.tsx` — add PairDetail route
+
+## No database changes needed
+All data comes from existing tables (`instruments`, `user_watchlist`, `signals`, `trade_journal_entries`) plus mock market data.
 
