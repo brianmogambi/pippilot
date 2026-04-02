@@ -57,32 +57,62 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_currency: string
+          account_equity: number | null
           account_size: number | null
+          broker_name: string | null
           created_at: string
           default_risk_pct: number | null
           display_name: string | null
           experience_level: string | null
           id: string
+          max_daily_loss_pct: number | null
+          notifications_enabled: boolean | null
+          onboarding_completed: boolean | null
+          preferred_pairs: string[] | null
+          preferred_sessions: string[] | null
+          timezone: string | null
+          trading_style: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          account_currency?: string
+          account_equity?: number | null
           account_size?: number | null
+          broker_name?: string | null
           created_at?: string
           default_risk_pct?: number | null
           display_name?: string | null
           experience_level?: string | null
           id?: string
+          max_daily_loss_pct?: number | null
+          notifications_enabled?: boolean | null
+          onboarding_completed?: boolean | null
+          preferred_pairs?: string[] | null
+          preferred_sessions?: string[] | null
+          timezone?: string | null
+          trading_style?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          account_currency?: string
+          account_equity?: number | null
           account_size?: number | null
+          broker_name?: string | null
           created_at?: string
           default_risk_pct?: number | null
           display_name?: string | null
           experience_level?: string | null
           id?: string
+          max_daily_loss_pct?: number | null
+          notifications_enabled?: boolean | null
+          onboarding_completed?: boolean | null
+          preferred_pairs?: string[] | null
+          preferred_sessions?: string[] | null
+          timezone?: string | null
+          trading_style?: string | null
           updated_at?: string
           user_id?: string
         }
