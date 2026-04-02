@@ -1,9 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
+  Eye,
   TrendingUp,
   Calculator,
   Bell,
+  BookOpen,
   Settings,
   Activity,
   LogOut,
@@ -12,9 +14,11 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/watchlist", icon: Eye, label: "Watchlist" },
   { to: "/signals", icon: TrendingUp, label: "Signals" },
   { to: "/calculator", icon: Calculator, label: "Calculator" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
+  { to: "/journal", icon: BookOpen, label: "Journal" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

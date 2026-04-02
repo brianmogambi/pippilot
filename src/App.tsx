@@ -12,6 +12,8 @@ import SignalDetail from "./pages/SignalDetail";
 import CalculatorPage from "./pages/CalculatorPage";
 import Alerts from "./pages/Alerts";
 import SettingsPage from "./pages/SettingsPage";
+import Watchlist from "./pages/Watchlist";
+import Journal from "./pages/Journal";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -37,10 +39,12 @@ const App = () => (
             {/* Protected app routes */}
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<Index />} />
+              <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/signals" element={<Signals />} />
               <Route path="/signals/:id" element={<SignalDetail />} />
               <Route path="/calculator" element={<CalculatorPage />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/journal" element={<Journal />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
