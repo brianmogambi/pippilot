@@ -1,85 +1,74 @@
 
 
-# Phase 5 — Watchlist Page Rebuild
+# Phase 6 — Pair Detail / Chart Analysis Page
 
 ## Current state
-`Watchlist.tsx` is a basic page: select a pair from instruments, add/remove from `user_watchlist`, display in a simple 3-column table (Pair, Added, Delete). No mock market data, no filters, no pair detail navigation.
+`PairDetail.tsx` is a basic overview: price/spread/change cards, 3 trend cards, session/news badges, active signals list, journal entries list, and a "chart coming soon" placeholder. It already queries `signals`, `user_watchlist`, and `trade_journal_entries` from DB and uses `mockMarketData` for prices/trends.
 
 ## What changes
-
-Full rebuild of `src/pages/Watchlist.tsx` into a professional market watch screen, plus a new `PairDetail` page.
-
-### 1. Mock market data layer
-Create `src/data/mockMarketData.ts` — a lookup map keyed by symbol providing:
-- `price`, `spread`, `dailyChange`, `dailyChangePct`
-- `atr` (placeholder numeric), `volatility` ("Low"/"Med"/"High")
-- `trendH1`, `trendH4`, `trendD1` ("bullish"/"bearish"/"neutral")
-- `activeSession` ("London"/"New York"/"Asia"/"Closed")
-- `newsRisk` (boolean — upcoming high-impact news flag)
-- Covers all seeded instruments (~15 pairs)
-
-### 2. Watchlist page rebuild (`src/pages/Watchlist.tsx`)
-**Header area:**
-- Title + subtitle
-- Search input (filters table by pair name)
-- Add pair dropdown + button (existing logic, retained)
-
-**Filter bar:**
-- Favorites only toggle (show only `user_watchlist` pairs vs all instruments)
-- Signal status filter: All / Active Signal / No Signal
-- Session filter: All / London / New York / Asia
-- Trend direction: All / Bullish / Bearish / Neutral (based on H4 trend)
-- Volatility: All / Low / Med / High
-- Implemented as a row of small `Select` dropdowns
-
-**Table columns:**
-- Star icon (favorite/unfavorite — toggles `user_watchlist` membership)
-- Pair name
-- Price (from mock data)
-- Spread (mock)
-- Daily Change + Change % (color-coded)
-- ATR / Volatility badge (Low/Med/High with StatusBadge)
-- Session status badge
-- Trend summary (H1/H4/D1 arrows or badges, compact)
-- Signal status badge (cross-reference active signals from DB)
-- News risk flag icon (warning triangle if `newsRisk` is true)
-- Row is clickable → navigates to `/watchlist/:pair`
-
-**Data flow:**
-- Query `instruments` for full pair list
-- Query `user_watchlist` for favorites
-- Query `signals` (active) for signal status cross-reference
-- Merge with mock market data map
-- Apply filters client-side
-
-**States:** Loading skeleton rows, empty state when no instruments match filters.
-
-### 3. Pair Detail page (`src/pages/PairDetail.tsx`)
-A dedicated page at `/watchlist/:pair` showing:
-- Pair name + favorite toggle
-- Price, spread, daily change (from mock data)
-- Trend summary cards (H1, H4, D1 — each with direction badge)
-- Volatility / ATR card
-- Session status
-- News risk indicator
-- Active signals for this pair (query `signals` filtered by pair)
-- Recent journal entries for this pair
-- Placeholder chart area (empty card with "Chart coming soon")
-- Back link to watchlist
-
-### 4. Route addition
-Add `/watchlist/:pair` route in `App.tsx` pointing to `PairDetail`.
+Full rebuild of `src/pages/PairDetail.tsx` into a professional analysis workspace with 7 sections. Also extend `mockMarketData.ts` with key levels data and create a mock setup/analysis data structure.
 
 ---
 
-## Files to create
-- `src/data/mockMarketData.ts` — mock price/spread/ATR/trend/session/news data
-- `src/pages/PairDetail.tsx` — pair detail view
+### 1. Extend mock data (`src/data/mockMarketData.ts`)
+Add to `MarketData` interface and each entry:
+- `supportLevel`, `resistanceLevel`, `sessionHigh`, `sessionLow`, `prevDayHigh`, `prevDayLow` (numeric placeholders)
+- `marketStructure`: "trending" | "ranging" | "breakout"
 
-## Files to modify
-- `src/pages/Watchlist.tsx` — full rebuild with filters, rich table, search
-- `src/App.tsx` — add PairDetail route
+Create a new exported `mockPairAnalysis` map keyed by symbol with:
+- `setupType`, `direction`, `entryZone` [min, max], `stopLoss`, `tp1`, `tp2`, `tp3`, `confidence`, `setupQuality` ("A+" | "A" | "B" | "C"), `invalidation` (text)
+- `beginnerExplanation`, `expertExplanation`, `reasonsFor` (string[]), `reasonsAgainst` (string[]), `noTradeReason` (string | null)
+- `verdict`: "trade" | "no_trade"
+- Only provide analysis for ~6 pairs; others return null (no setup available state)
 
-## No database changes needed
-All data comes from existing tables (`instruments`, `user_watchlist`, `signals`, `trade_journal_entries`) plus mock market data.
+### 2. Rebuild `src/pages/PairDetail.tsx`
+
+**Layout**: Two-column on desktop (left: chart + key levels + setup; right: bias summary + AI explanation + alerts). Full stack on mobile.
+
+**Section 1 — Header**
+- Back button, pair name, price (mono), spread, daily change (colored), session badge, favorite toggle
+- Compact single row
+
+**Section 2 — Chart Area**
+- Large card with aspect-video ratio placeholder
+- Timeframe selector bar: 5m, 15m, 1H, 4H, 1D (toggle group, visual only for now)
+- "TradingView integration coming soon" message
+
+**Section 3 — Multi-Timeframe Bias Summary** (right column top)
+- 4 compact cards in a 2x2 grid:
+  - Higher TF Trend (D1 trend from market data)
+  - Execution TF (H1 trend)
+  - Volatility Condition (volatility level + ATR)
+  - Market Structure (new field)
+- Each with icon, label, StatusBadge
+
+**Section 4 — Key Levels Panel** (below chart, left column)
+- Card with 6 rows: Support, Resistance, Session High, Session Low, Prev Day High, Prev Day Low
+- Mono font values, colored labels
+
+**Section 5 — Setup Card**
+- If analysis exists and verdict is "trade": direction badge, setup type, entry zone range, SL, TP1/TP2/TP3, confidence bar, setup quality badge, invalidation text
+- If verdict is "no_trade": prominent "No Trade Recommended" state with Ban icon and reason
+- If no analysis: empty state "No setup analysis available"
+
+**Section 6 — AI Explanation Panel** (right column)
+- Tabbed or sectioned: Beginner / Expert explanations
+- Reasons For (green bullets) and Reasons Against (red bullets)
+- No-trade explanation if applicable
+
+**Section 7 — Alert Controls** (bottom of right column)
+- Card with 3 toggle switches:
+  - "Notify on entry zone reached"
+  - "Notify on confirmation"
+  - "Notify on TP/SL/invalidation"
+- Toggles are visual only for now (toast on toggle, no DB write yet)
+
+**Existing features retained**: Active signals list (from DB), recent journal entries (from DB), disclaimer footer.
+
+### Files to modify
+- `src/data/mockMarketData.ts` — extend interface + add `mockPairAnalysis`
+- `src/pages/PairDetail.tsx` — full rebuild
+
+### No other files change
+Routes, layout, other pages untouched. No DB changes needed.
 
