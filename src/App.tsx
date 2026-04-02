@@ -13,6 +13,7 @@ import CalculatorPage from "./pages/CalculatorPage";
 import Alerts from "./pages/Alerts";
 import SettingsPage from "./pages/SettingsPage";
 import Watchlist from "./pages/Watchlist";
+import PairDetail from "./pages/PairDetail";
 import Journal from "./pages/Journal";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
