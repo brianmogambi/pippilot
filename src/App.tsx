@@ -39,10 +39,12 @@ const App = () => (
             {/* Protected app routes */}
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<Index />} />
+              <Route path="/watchlist" element={<Watchlist />} />
               <Route path="/signals" element={<Signals />} />
               <Route path="/signals/:id" element={<SignalDetail />} />
               <Route path="/calculator" element={<CalculatorPage />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/journal" element={<Journal />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
