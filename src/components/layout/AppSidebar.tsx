@@ -20,7 +20,7 @@ const navItems = [
 
 export default function AppSidebar() {
   const { pathname } = useLocation();
-
+  const { signOut } = useAuth();
   return (
     <aside className="hidden md:flex flex-col w-64 border-r border-border bg-sidebar min-h-screen p-4 gap-2">
       <Link to="/" className="flex items-center gap-2 px-3 py-4 mb-4">
