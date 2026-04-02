@@ -1,62 +1,65 @@
 
 
-# Phase 7 — Signals Page Rebuild
+# Phase 8 — Risk Calculator Page Rebuild
 
 ## Current state
-- `Signals.tsx`: Basic page using `mockSignals` from `mockSignals.ts`, simple card grid, only timeframe + verdict filters
-- `SignalDetail.tsx`: Basic two-column layout with price levels, AI reasoning, and risk calculator — uses `mockSignals` data
-- `SignalCard.tsx`: Simple card with pair, direction, entry/SL/TP1, confidence bar
-- DB `signals` table already has: pair, direction, timeframe, setup_type, entry_price, stop_loss, tp1/tp2/tp3, confidence, verdict, status, ai_reasoning, invalidation_reason, created_at
-- `mockPairAnalysis` in `mockMarketData.ts` already has setup quality, beginner/expert explanations, reasons for/against, no-trade reasoning
+Basic calculator with 4 inputs (account size, risk %, entry, SL) and 3 outputs (risk amount, SL distance, lot size). Simple component, no validation, no warnings, no educational content beyond a formula box.
 
-## What changes
+## Plan
 
-### 1. Signals page rebuild (`src/pages/Signals.tsx`)
+### 1. Rebuild `src/components/calculator/RiskCalculator.tsx`
 
-**Header**: Title, subtitle, disclaimer warning badge ("AI-generated — not financial advice")
+**Inputs section** (clean two-column grid):
+- Account Balance + Account Equity (side by side)
+- Account Currency (Select: USD, EUR, GBP, JPY, AUD, CAD, CHF)
+- Selected Pair (Select populated from `mockMarketData` symbols)
+- Entry Price + Stop Loss (side by side, auto-populates SL in pips)
+- Stop Loss in Pips (editable — syncs bidirectionally with SL price when pair selected)
+- Risk % per Trade (slider + input, default 1%, range 0.1–10%)
+- Fixed Amount Risk (optional input, overrides % calc when filled)
+- Current Open Risk (optional input — existing exposure in $)
+- Conservative Mode toggle (Switch — halves the calculated lot size, adds extra warnings)
 
-**Filter bar** (row of Select dropdowns + search):
-- Pair search/select (text input filters by pair name)
-- Timeframe: All / 5m / 15m / 1H / 4H / D
-- Direction: All / Long / Short
-- Setup Quality: All / A+ / A / B / C
-- Confidence range: All / 80%+ / 60-79% / Below 60%
-- Status: All / Monitoring / Ready / Triggered / Invalidated / Closed
+**Validation**:
+- Entry and SL required, must differ
+- Risk % clamped 0.1–10
+- Account balance must be positive
+- SL pips auto-calculated or manually entered
+- Visual inline error messages
 
-**Table view** (replaces card grid — professional trader UX):
-- Columns: Pair, Direction (arrow + badge), Timeframe, Setup Type, Entry, SL, TP1, R:R (computed), Confidence (bar + %), Quality badge, Status badge, Timestamp (relative)
-- Each row clickable → opens signal detail drawer/sheet
-- Responsive: table on desktop, stacked cards on mobile
+**Outputs section** (prominent result card):
+- Maximum Money at Risk ($)
+- Estimated Lot Size (standard lots + mini/micro breakdown)
+- Pip Value (derived, placeholder logic — $10/pip for standard lot on USD pairs)
+- Estimated Exposure (lot size × 100,000 in account currency)
+- Warning badge if total open risk (current + new) exceeds 5% of balance
+- Warning badge if daily loss threshold (configurable, default 3%) is near/exceeded
 
-**Data source**: Query `signals` table from DB. Merge with `mockPairAnalysis` for quality/explanations. Fall back gracefully when no analysis exists.
+**Conservative mode**: When toggled on, halves lot size, shows "Conservative" badge, adds amber warning about why conservative is recommended for beginners.
 
-**States**: Loading skeleton, empty state with message, no-match filter state.
+### 2. Rebuild `src/pages/CalculatorPage.tsx`
 
-### 2. Signal detail drawer (`src/components/signals/SignalDetailDrawer.tsx`)
+**Layout**: Two-column on desktop (left: calculator form + results; right: educational panels). Stacked on mobile.
 
-Uses `Sheet` component (slide-in from right). Sections:
+**Educational panels** (right column):
+- "How Risk is Calculated" — step-by-step explanation with formula
+- "Why Smaller Risk Protects Your Account" — brief educational card
+- "Impact of Consecutive Losses" — table/visual showing account balance after 1–10 consecutive losses at 1%, 2%, 3% risk (e.g., 10 losses at 2% = ~18% drawdown vs 10 at 5% = ~40%)
 
-- **Header**: Pair, direction badge, timeframe, status, quality badge, disclaimer label
-- **Price levels**: Entry, SL, TP1/TP2/TP3, R:R ratio
-- **Setup info**: Setup type, confidence bar, aggressive vs conservative label (derived: confidence >= 75 = aggressive, else conservative)
-- **AI Explanation panel**: Tabbed — Beginner / Expert (from `mockPairAnalysis`)
-- **Reasons For** (green) / **Reasons Against** (red) bullet lists
-- **Invalidation condition** (from DB `invalidation_reason` or analysis)
-- **Management plan** (hardcoded placeholder: "Scale out at TP1, move SL to breakeven, trail to TP2/TP3")
-- **No-trade explanation** if verdict is no_trade (prominent warning card)
-- **Warning footer**: "This is AI-generated analysis. Always do your own research."
+### 3. Calculation logic
 
-### 3. Update SignalCard for mobile fallback (`src/components/signals/SignalCard.tsx`)
-- Add setup_type, quality badge, status badge, R:R ratio, timestamp
-- Keep as mobile-responsive card version of the table data
+Extract pure calculation functions into the component (structured for future extraction to a utility file):
+- `calculateRiskAmount(balance, riskPct, fixedAmount?)`
+- `calculatePipDistance(entry, sl, pipMultiplier)`
+- `calculateLotSize(riskAmount, pipDistance, pipValue)`
+- `calculateExposure(lotSize)`
 
-### Files to create
-- `src/components/signals/SignalDetailDrawer.tsx`
+Pip multiplier: 10000 for most pairs, 100 for JPY pairs (detected from pair name).
 
 ### Files to modify
-- `src/pages/Signals.tsx` — full rebuild with filters + table + DB query
-- `src/components/signals/SignalCard.tsx` — enhanced with additional fields
+- `src/components/calculator/RiskCalculator.tsx` — full rebuild
+- `src/pages/CalculatorPage.tsx` — full rebuild with educational panels
 
-### No database or route changes needed
-All fields already exist in the `signals` table. Routes already configured.
+### No other files change
+No DB changes, no route changes.
 
