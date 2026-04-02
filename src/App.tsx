@@ -45,6 +45,7 @@ const App = () => (
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<Index />} />
               <Route path="/watchlist" element={<Watchlist />} />
+              <Route path="/watchlist/:pair" element={<PairDetail />} />
               <Route path="/signals" element={<Signals />} />
               <Route path="/signals/:id" element={<SignalDetail />} />
               <Route path="/calculator" element={<CalculatorPage />} />
