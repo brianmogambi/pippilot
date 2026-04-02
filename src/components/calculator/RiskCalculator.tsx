@@ -7,7 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Calculator, ShieldAlert, AlertTriangle, Shield } from "lucide-react";
-import { marketData } from "@/data/mockMarketData";
+import { mockMarketData } from "@/data/mockMarketData";
 
 // ── Pure calculation helpers (structured for future extraction) ──
 
