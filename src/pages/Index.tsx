@@ -116,7 +116,7 @@ const Dashboard = () => {
                     <span className="text-sm text-foreground">{alert.title ?? alert.pair}</span>
                     <span className="text-xs text-muted-foreground">{alert.message ?? alert.condition}</span>
                   </div>
-                  <StatusBadge variant={alert.status}>{alert.status}</StatusBadge>
+                  <StatusBadge variant={alert.status as "pending" | "triggered" | "expired"}>{alert.status}</StatusBadge>
                 </div>
               )) : (
                 <div className="p-6 text-center text-sm text-muted-foreground">No alerts</div>
