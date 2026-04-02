@@ -1,89 +1,68 @@
 
 
-# Phase 1 — Enhanced App Shell & Navigation
+# Phase 2 — Authentication & Onboarding
 
 ## What exists
-- Auth pages (Login, Signup, ForgotPassword, ResetPassword) — working
-- Basic sidebar + mobile nav with 5 routes (Dashboard, Signals, Calculator, Alerts, Settings)
-- Dashboard with stats cards, recent signals, watchlist
-- Signals page with filters, SignalDetail page
-- Calculator, Alerts, Settings pages — basic implementations
-- Mock data in `mockSignals.ts`
-- Dark theme configured
+- Auth pages (Login, Signup, ForgotPassword, ResetPassword) — working with Supabase Auth
+- AuthContext with session management, ProtectedRoute wrapper
+- `profiles` table with: user_id, display_name, account_size, default_risk_pct, experience_level
+- Auto-profile creation trigger on signup (`handle_new_user`)
+- Basic SettingsPage with local state only (not wired to DB)
 
-## What's new / changing
-Two new pages (**Watchlist**, **Trade Journal**) and a **top header bar** with page title, account summary, and notifications. The Dashboard gets expanded mock widgets. All pages get a premium fintech polish pass.
+## What's needed
+
+### 1. Database migration — expand profiles table
+Add columns to `profiles`:
+- `account_currency` (text, default 'USD')
+- `broker_name` (text, nullable)
+- `account_equity` (numeric, default 10000)
+- `max_daily_loss_pct` (numeric, default 5)
+- `preferred_pairs` (text[], default '{}')
+- `preferred_sessions` (text[], default '{}')
+- `trading_style` (text, default 'intraday')
+- `timezone` (text, default 'UTC')
+- `notifications_enabled` (boolean, default true)
+- `onboarding_completed` (boolean, default false)
+
+### 2. Onboarding page (`/onboarding`)
+Create `src/pages/Onboarding.tsx`:
+- Multi-step wizard (3 steps) with progress indicator
+- **Step 1 — About You**: display name, experience level (with beginner-friendly descriptions for each), trading style (scalping/intraday/swing with descriptions)
+- **Step 2 — Account Setup**: account currency, broker name (optional), account balance, account equity, preferred pairs (multi-select from major/minor pairs), preferred sessions (London/New York/Asia checkboxes)
+- **Step 3 — Risk Preferences**: default risk per trade %, max daily loss %, with helper text explaining each
+- On submit: upserts profile row, sets `onboarding_completed = true`, redirects to dashboard
+- Clean, polished dark UI with card-based steps
+
+### 3. Onboarding gate in ProtectedRoute
+Update `ProtectedRoute` to:
+- Fetch the user's profile after auth check
+- If `onboarding_completed === false`, redirect to `/onboarding`
+- Add `/onboarding` as a protected but non-gated route
+
+### 4. Rebuild Settings page
+Rebuild `src/pages/SettingsPage.tsx` with tabbed sections:
+- **Profile**: display name, experience level, trading style
+- **Risk Preferences**: account balance, equity, currency, broker, default risk %, max daily loss %
+- **Trading**: preferred pairs, preferred sessions
+- **Notifications**: notifications enabled toggle
+- **Display**: timezone select, theme toggle (placeholder)
+- All fields load from DB via React Query, save via mutation
+- Same beginner-friendly descriptions as onboarding
+
+### 5. Wire AuthContext with profile
+Extend `AuthContext` to expose a `profile` object and `refetchProfile` function so Dashboard and other pages can access user preferences without separate fetches.
 
 ---
 
-## Plan
+## Files to create
+- `src/pages/Onboarding.tsx`
 
-### 1. Add top header component
-Create `src/components/layout/AppHeader.tsx`:
-- Displays current page title (derived from route)
-- Right side: account summary chip (balance + equity), notification bell icon with badge count, user avatar/initials dropdown
-- Sticky, blends with dark theme
+## Files to modify
+- `src/pages/SettingsPage.tsx` — full rebuild with DB integration
+- `src/components/auth/ProtectedRoute.tsx` — add onboarding gate
+- `src/contexts/AuthContext.tsx` — add profile fetching
+- `src/App.tsx` — add `/onboarding` route
 
-### 2. Update AppLayout
-- Insert `<AppHeader />` above `<Outlet />`
-- Structure: sidebar left, header + content right
-
-### 3. Expand mock data
-Add to `src/data/mockSignals.ts`:
-- `mockAccountStats` — balance, equity, margin, daily P&L, daily risk used
-- `mockJournalEntries` — id, pair, direction, entry/exit price, result, notes, date
-- `mockMarketSummary` — major pairs with sentiment/change data
-- `mockNotifications` — id, message, read, timestamp
-
-### 4. New page: Watchlist (`/watchlist`)
-Create `src/pages/Watchlist.tsx`:
-- Table of watched pairs with columns: pair, current price (mock), daily change, signal status, actions (remove)
-- Add-pair input/button
-- Uses existing `watchlistPairs` data expanded with price mock data
-
-### 5. New page: Trade Journal (`/journal`)
-Create `src/pages/Journal.tsx`:
-- Table of past trades: date, pair, direction, entry, exit, P&L, notes
-- Summary stats row at top (total trades, win rate, avg R:R)
-- "Add Entry" button (opens a form or placeholder)
-- Uses `mockJournalEntries`
-
-### 6. Enhanced Dashboard
-Rebuild `src/pages/Index.tsx` with a richer widget grid:
-- **Row 1**: Account Balance, Equity, Daily P&L, Daily Risk Status (4 stat cards)
-- **Row 2 left (2/3)**: Active Setups (signal cards), Latest Alerts (3 most recent)
-- **Row 2 right (1/3)**: Watchlist Summary (compact list), Recent Journal (last 3 entries)
-- **Row 3**: Market Summary panel (major pairs grid with sentiment badges)
-- Risk disclaimer banner at bottom
-
-### 7. Update sidebar & mobile nav
-- Add Watchlist (Eye icon) and Trade Journal (BookOpen icon) to nav items
-- Update routes in `App.tsx`
-- Sidebar order: Dashboard, Watchlist, Signals, Calculator, Alerts, Journal, Settings
-
-### 8. Reusable components
-- `src/components/ui/stat-card.tsx` — icon, label, value, optional trend indicator
-- `src/components/ui/status-badge.tsx` — colored badge for signal status, alert status, sentiment
-
-### 9. Disclaimer labels
-Add visible labels throughout:
-- Header: small "AI-Assisted Analysis" badge
-- Dashboard footer: risk disclaimer card
-- Signal cards: "Not financial advice" fine print
-- Calculator: "Trading carries risk" note
-
-### Files to create
-- `src/components/layout/AppHeader.tsx`
-- `src/pages/Watchlist.tsx`
-- `src/pages/Journal.tsx`
-- `src/components/ui/stat-card.tsx`
-- `src/components/ui/status-badge.tsx`
-
-### Files to modify
-- `src/data/mockSignals.ts` — add new mock data
-- `src/components/layout/AppLayout.tsx` — add header
-- `src/components/layout/AppSidebar.tsx` — add 2 nav items
-- `src/components/layout/MobileNav.tsx` — add 2 nav items (7 items, scrollable or priority)
-- `src/pages/Index.tsx` — expanded dashboard
-- `src/App.tsx` — add Watchlist and Journal routes
+## Migration
+Single SQL migration adding 10 columns to `profiles` table.
 
