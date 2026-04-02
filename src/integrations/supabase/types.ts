@@ -25,6 +25,7 @@ export type Database = {
           severity: string
           signal_id: string
           status: string
+          timeframe: string | null
           title: string | null
           triggered_at: string | null
           type: string
@@ -40,6 +41,7 @@ export type Database = {
           severity?: string
           signal_id: string
           status?: string
+          timeframe?: string | null
           title?: string | null
           triggered_at?: string | null
           type?: string
@@ -55,6 +57,7 @@ export type Database = {
           severity?: string
           signal_id?: string
           status?: string
+          timeframe?: string | null
           title?: string | null
           triggered_at?: string | null
           type?: string
