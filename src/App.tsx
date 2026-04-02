@@ -13,6 +13,7 @@ import CalculatorPage from "./pages/CalculatorPage";
 import Alerts from "./pages/Alerts";
 import SettingsPage from "./pages/SettingsPage";
 import Watchlist from "./pages/Watchlist";
+import PairDetail from "./pages/PairDetail";
 import Journal from "./pages/Journal";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -44,6 +45,7 @@ const App = () => (
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<Index />} />
               <Route path="/watchlist" element={<Watchlist />} />
+              <Route path="/watchlist/:pair" element={<PairDetail />} />
               <Route path="/signals" element={<Signals />} />
               <Route path="/signals/:id" element={<SignalDetail />} />
               <Route path="/calculator" element={<CalculatorPage />} />
