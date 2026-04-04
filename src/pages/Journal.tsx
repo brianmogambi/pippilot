@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
+import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3, PlusCircle } from "lucide-react";
 import { useJournalEntries, useJournalStats } from "@/hooks/use-journal";
 import StatusBadge from "@/components/ui/status-badge";
 import StatCard from "@/components/ui/stat-card";
+import EmptyState from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import JournalEntryForm from "@/components/journal/JournalEntryForm";
 import JournalFilters, { defaultFilters, type JournalFiltersState } from "@/components/journal/JournalFilters";
@@ -15,11 +16,11 @@ export default function Journal() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<any | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
 
   const { data: entries = [], isLoading, refetch } = useJournalEntries();
   const stats = useJournalStats(entries);
 
-  // Filter entries
   const filtered = useMemo(() => {
     return entries.filter((e) => {
       if (filters.pair && e.pair !== filters.pair) return false;
@@ -43,13 +44,13 @@ export default function Journal() {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Trade Journal</h1>
           <p className="text-sm text-muted-foreground mt-1">Track, review, and learn from your trading performance</p>
         </div>
-        <JournalEntryForm onSuccess={refetch} />
+        <JournalEntryForm onSuccess={refetch} open={formOpen} onOpenChange={setFormOpen} />
       </div>
 
       {/* 6 stat cards */}
@@ -66,37 +67,40 @@ export default function Journal() {
       <JournalFilters filters={filters} onChange={setFilters} />
 
       {/* Journal table */}
-      <div className="rounded-lg border border-border bg-card">
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
           <div className="p-6 space-y-3">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">
-            <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">{entries.length === 0 ? "No journal entries yet. Add your first trade!" : "No entries match your filters."}</p>
-          </div>
+          <EmptyState
+            icon={BookOpen}
+            title={entries.length === 0 ? "Start your trading journal" : "No entries match your filters"}
+            description={entries.length === 0 ? "Log your first trade to start tracking your performance and building better habits." : "Try adjusting your filters to see more entries."}
+            actionLabel={entries.length === 0 ? "Add First Trade" : undefined}
+            onAction={entries.length === 0 ? () => setFormOpen(true) : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Pair</TableHead>
-                  <TableHead>Direction</TableHead>
-                  <TableHead>Setup</TableHead>
-                  <TableHead className="text-right">Entry</TableHead>
-                  <TableHead className="text-right">Exit</TableHead>
-                  <TableHead className="text-right">P&L (pips)</TableHead>
-                  <TableHead className="text-right">P&L ($)</TableHead>
-                  <TableHead className="text-center">Confidence</TableHead>
-                  <TableHead className="text-center">Plan</TableHead>
+              <TableHeader className="sticky top-0 z-10">
+                <TableRow className="bg-muted/30">
+                  <TableHead className="text-xs">Date</TableHead>
+                  <TableHead className="text-xs">Pair</TableHead>
+                  <TableHead className="text-xs">Direction</TableHead>
+                  <TableHead className="text-xs">Setup</TableHead>
+                  <TableHead className="text-xs text-right">Entry</TableHead>
+                  <TableHead className="text-xs text-right">Exit</TableHead>
+                  <TableHead className="text-xs text-right">P&L (pips)</TableHead>
+                  <TableHead className="text-xs text-right">P&L ($)</TableHead>
+                  <TableHead className="text-xs text-center">Confidence</TableHead>
+                  <TableHead className="text-xs text-center">Plan</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((entry) => (
-                  <TableRow key={entry.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleRowClick(entry)}>
-                    <TableCell className="text-muted-foreground text-sm">{new Date(entry.opened_at).toLocaleDateString()}</TableCell>
+                  <TableRow key={entry.id} className="cursor-pointer hover:bg-muted/40 transition-colors" onClick={() => handleRowClick(entry)}>
+                    <TableCell className="text-muted-foreground text-xs">{new Date(entry.opened_at).toLocaleDateString()}</TableCell>
                     <TableCell className="font-medium text-foreground">{entry.pair}</TableCell>
                     <TableCell>
                       <StatusBadge variant={entry.direction === "long" ? "bullish" : "bearish"}>
@@ -105,12 +109,12 @@ export default function Journal() {
                       </StatusBadge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground capitalize">{entry.setup_type?.replace("_", " ") ?? "—"}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{entry.entry_price}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{entry.exit_price ?? "—"}</TableCell>
-                    <TableCell className={`text-right font-mono text-sm font-semibold ${(Number(entry.result_pips) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                    <TableCell className="text-right font-mono text-xs">{entry.entry_price}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">{entry.exit_price ?? "—"}</TableCell>
+                    <TableCell className={`text-right font-mono text-xs font-semibold ${(Number(entry.result_pips) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
                       {entry.result_pips != null ? `${Number(entry.result_pips) >= 0 ? "+" : ""}${entry.result_pips}` : "—"}
                     </TableCell>
-                    <TableCell className={`text-right font-mono text-sm ${(Number(entry.result_amount) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                    <TableCell className={`text-right font-mono text-xs ${(Number(entry.result_amount) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
                       {entry.result_amount != null ? `$${entry.result_amount}` : "—"}
                     </TableCell>
                     <TableCell className="text-center">
@@ -132,10 +136,6 @@ export default function Journal() {
           </div>
         )}
       </div>
-
-      <p className="text-[11px] text-muted-foreground text-center">
-        ⚠️ AI-assisted analysis only. Past performance is not indicative of future results.
-      </p>
 
       {/* Detail drawer */}
       <JournalDetailDrawer entry={selectedEntry} open={drawerOpen} onOpenChange={setDrawerOpen} onEdit={handleEdit} />

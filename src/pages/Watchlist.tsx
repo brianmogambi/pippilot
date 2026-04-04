@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Star, Plus, Search, AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowRight } from "lucide-react";
+import { Star, Plus, Search, AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowRight, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useWatchlist, useInstruments, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/use-watchlist";
 import { useActiveSignals } from "@/hooks/use-signals";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import EmptyState from "@/components/ui/empty-state";
 import StatusBadge from "@/components/ui/status-badge";
 import { getMarketData, type TrendDirection } from "@/data/mockMarketData";
 
@@ -67,7 +68,7 @@ export default function Watchlist() {
   }, [instruments, search, favOnly, filterSignal, filterSession, filterTrend, filterVol, favSet, signalMap]);
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-4">
+    <div className="p-4 md:p-6 lg:p-8 space-y-4 pb-mobile-nav">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -76,12 +77,12 @@ export default function Watchlist() {
         </div>
         <div className="flex items-center gap-2">
           <Select value={newPair} onValueChange={setNewPair}>
-            <SelectTrigger className="w-36 h-9 text-sm"><SelectValue placeholder="Add pair…" /></SelectTrigger>
+            <SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="Add pair…" /></SelectTrigger>
             <SelectContent>
               {availableForAdd.map((i) => <SelectItem key={i.symbol} value={i.symbol}>{i.symbol}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button size="sm" className="gap-1" disabled={!newPair || addMutation.isPending} onClick={() => { addMutation.mutate(newPair); setNewPair(""); }}>
+          <Button size="sm" className="gap-1 h-8" disabled={!newPair || addMutation.isPending} onClick={() => { addMutation.mutate(newPair); setNewPair(""); }}>
             <Plus className="h-3.5 w-3.5" /> Add
           </Button>
         </div>
@@ -91,13 +92,13 @@ export default function Watchlist() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-full sm:w-52">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input placeholder="Search pairs…" value={search} onChange={(e) => setSearch(e.target.value)} className="h-9 pl-8 text-sm" />
+          <Input placeholder="Search pairs…" value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-xs" />
         </div>
-        <Button size="sm" variant={favOnly ? "default" : "outline"} className="h-9 gap-1 text-xs" onClick={() => setFavOnly(!favOnly)}>
+        <Button size="sm" variant={favOnly ? "default" : "outline"} className="h-8 gap-1 text-xs" onClick={() => setFavOnly(!favOnly)}>
           <Star className={`h-3 w-3 ${favOnly ? "fill-current" : ""}`} /> Favorites
         </Button>
         <Select value={filterSignal} onValueChange={setFilterSignal}>
-          <SelectTrigger className="h-9 w-32 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Signals</SelectItem>
             <SelectItem value="active">Has Signal</SelectItem>
@@ -105,7 +106,7 @@ export default function Watchlist() {
           </SelectContent>
         </Select>
         <Select value={filterSession} onValueChange={setFilterSession}>
-          <SelectTrigger className="h-9 w-32 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Sessions</SelectItem>
             <SelectItem value="London">London</SelectItem>
@@ -114,7 +115,7 @@ export default function Watchlist() {
           </SelectContent>
         </Select>
         <Select value={filterTrend} onValueChange={setFilterTrend}>
-          <SelectTrigger className="h-9 w-32 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Trends</SelectItem>
             <SelectItem value="bullish">Bullish</SelectItem>
@@ -123,7 +124,7 @@ export default function Watchlist() {
           </SelectContent>
         </Select>
         <Select value={filterVol} onValueChange={setFilterVol}>
-          <SelectTrigger className="h-9 w-28 text-xs"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Vol</SelectItem>
             <SelectItem value="Low">Low</SelectItem>
@@ -137,28 +138,28 @@ export default function Watchlist() {
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {loadingInstruments ? (
           <div className="p-6 space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
         ) : rows.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">
-            <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm font-medium">No instruments match your filters</p>
-            <p className="text-xs mt-1">Try adjusting your search or filter criteria</p>
-          </div>
+          <EmptyState
+            icon={Eye}
+            title="No instruments match your filters"
+            description="Try adjusting your search or filter criteria to find instruments."
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
+              <TableHeader className="sticky top-0 z-10">
+                <TableRow className="bg-muted/30">
                   <TableHead className="w-10"></TableHead>
-                  <TableHead>Pair</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Spread</TableHead>
-                  <TableHead className="text-right">Change</TableHead>
-                  <TableHead className="text-center">Volatility</TableHead>
-                  <TableHead className="text-center">Session</TableHead>
-                  <TableHead className="text-center">Trend</TableHead>
-                  <TableHead className="text-center">Signal</TableHead>
+                  <TableHead className="text-xs">Pair</TableHead>
+                  <TableHead className="text-xs text-right">Price</TableHead>
+                  <TableHead className="text-xs text-right">Spread</TableHead>
+                  <TableHead className="text-xs text-right">Change</TableHead>
+                  <TableHead className="text-xs text-center">Volatility</TableHead>
+                  <TableHead className="text-xs text-center">Session</TableHead>
+                  <TableHead className="text-xs text-center">Trend</TableHead>
+                  <TableHead className="text-xs text-center">Signal</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -226,8 +227,8 @@ export default function Watchlist() {
         )}
       </div>
 
-      <p className="text-[11px] text-muted-foreground text-center">
-        ⚠️ Prices are indicative only. Not financial advice. Trading carries risk.
+      <p className="text-[10px] text-muted-foreground/60 text-center">
+        ⚠️ Prices are indicative only. Not financial advice.
       </p>
     </div>
   );

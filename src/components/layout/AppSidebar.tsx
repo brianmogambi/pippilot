@@ -1,18 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Eye,
-  TrendingUp,
-  Calculator,
-  Bell,
-  BookOpen,
-  Settings,
-  Activity,
-  LogOut,
-  ShieldCheck,
+  LayoutDashboard, Eye, TrendingUp, Calculator, Bell,
+  BookOpen, Settings, Activity, LogOut, ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/use-admin";
+import { Separator } from "@/components/ui/separator";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -58,6 +51,7 @@ export default function AppSidebar() {
       </nav>
 
       <div className="mt-auto space-y-2">
+        <Separator className="bg-border/50" />
         {isAdmin && (
           <Link
             to="/admin"
@@ -78,11 +72,12 @@ export default function AppSidebar() {
           <LogOut className="h-4 w-4" />
           Sign Out
         </button>
-        <div className="p-3 rounded-lg bg-accent/50 border border-border">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            ⚠️ AI-assisted analysis only. Not financial advice. Always manage your risk.
+        <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+          <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+            ⚠️ AI-assisted analysis only. Not financial advice.
           </p>
         </div>
+        <p className="text-[10px] text-muted-foreground/40 text-center">v1.0 MVP</p>
       </div>
     </aside>
   );

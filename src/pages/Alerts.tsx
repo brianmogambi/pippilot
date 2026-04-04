@@ -3,24 +3,19 @@ import {
   Bell, CheckCircle2, Clock, XCircle, AlertTriangle, Info,
   Eye, EyeOff, ExternalLink, CheckCheck, Filter,
   Crosshair, Target, ShieldCheck, ArrowRightLeft, Scissors,
-  LogOut, Ban, Zap, Newspaper, TriangleAlert, Settings,
-  Mail, Smartphone, Send,
+  LogOut, Ban, Zap, Newspaper, TriangleAlert,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts, useMarkAlertRead, useMarkAllAlertsRead } from "@/hooks/use-alerts";
 import { Skeleton } from "@/components/ui/skeleton";
+import EmptyState from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 
-// ── Alert type config ──────────────────────────────────────────────
 const alertTypeConfig: Record<string, { icon: React.ElementType; label: string }> = {
   setup_forming:        { icon: Crosshair,      label: "Setup Forming" },
   entry_zone_reached:   { icon: Target,          label: "Entry Zone" },
@@ -44,34 +39,15 @@ export default function Alerts() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // ── Filters ──────────────────────────────────────────────────────
   const [typeFilter, setTypeFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [readFilter, setReadFilter] = useState("all");
   const [pairFilter, setPairFilter] = useState("all");
 
-  // ── Data ─────────────────────────────────────────────────────────
   const { data: alerts = [], isLoading } = useAlerts();
-
-  const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("notifications_enabled")
-        .eq("user_id", user!.id)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  // ── Mutations ────────────────────────────────────────────────────
   const markRead = useMarkAlertRead();
   const markAllRead = useMarkAllAlertsRead();
 
-  // ── Derived data ─────────────────────────────────────────────────
   const pairs = useMemo(() => [...new Set(alerts.map((a) => a.pair))].sort(), [alerts]);
   const unreadCount = useMemo(() => alerts.filter((a) => !a.is_read).length, [alerts]);
 
@@ -86,9 +62,8 @@ export default function Alerts() {
     });
   }, [alerts, typeFilter, severityFilter, readFilter, pairFilter]);
 
-  // ── Render ───────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-5xl">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-5xl pb-mobile-nav">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -120,11 +95,8 @@ export default function Alerts() {
         <CardContent className="p-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[160px] h-8 text-xs">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[160px] h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 {Object.entries(alertTypeConfig).map(([key, cfg]) => (
@@ -132,11 +104,8 @@ export default function Alerts() {
                 ))}
               </SelectContent>
             </Select>
-
             <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
-                <SelectValue placeholder="Severity" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="Severity" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Severity</SelectItem>
                 <SelectItem value="info">Info</SelectItem>
@@ -144,22 +113,16 @@ export default function Alerts() {
                 <SelectItem value="critical">Critical</SelectItem>
               </SelectContent>
             </Select>
-
             <Select value={readFilter} onValueChange={setReadFilter}>
-              <SelectTrigger className="w-[120px] h-8 text-xs">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="unread">Unread</SelectItem>
                 <SelectItem value="read">Read</SelectItem>
               </SelectContent>
             </Select>
-
             <Select value={pairFilter} onValueChange={setPairFilter}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
-                <SelectValue placeholder="Pair" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="Pair" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Pairs</SelectItem>
                 {pairs.map((p) => (
@@ -167,7 +130,6 @@ export default function Alerts() {
                 ))}
               </SelectContent>
             </Select>
-
             {(typeFilter !== "all" || severityFilter !== "all" || readFilter !== "all" || pairFilter !== "all") && (
               <Button
                 variant="ghost"
@@ -187,19 +149,13 @@ export default function Alerts() {
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-lg" />)
         ) : filtered.length === 0 ? (
-          <Card className="border-border/50">
-            <CardContent className="p-12 text-center text-muted-foreground">
-              <Bell className="h-8 w-8 mx-auto mb-3 opacity-40" />
-              <p className="text-sm font-medium">
-                {alerts.length === 0 ? "No alerts yet" : "No alerts match your filters"}
-              </p>
-              <p className="text-xs mt-1 opacity-70">
-                {alerts.length === 0
-                  ? "Alerts will appear here as signals are tracked and market conditions change."
-                  : "Try adjusting your filters to see more alerts."}
-              </p>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={Bell}
+            title={alerts.length === 0 ? "No alerts yet" : "No alerts match your filters"}
+            description={alerts.length === 0
+              ? "Alerts will appear here as signals are tracked and market conditions change."
+              : "Try adjusting your filters to see more alerts."}
+          />
         ) : (
           filtered.map((alert) => {
             const sev = severityStyles[alert.severity] ?? severityStyles.info;
@@ -275,76 +231,16 @@ export default function Alerts() {
         )}
       </div>
 
-      {/* Notification preferences */}
-      <Collapsible>
-        <Card className="border-border/50">
-          <CollapsibleTrigger asChild>
-            <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                  <CardTitle className="text-sm font-medium">Notification Preferences</CardTitle>
-                </div>
-                <span className="text-xs text-muted-foreground">Click to expand</span>
-              </div>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="p-4 pt-0 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Bell className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">In-App Notifications</p>
-                    <p className="text-xs text-muted-foreground">Receive alerts inside PipPilot</p>
-                  </div>
-                </div>
-                <Switch checked={profile?.notifications_enabled ?? true} disabled />
-              </div>
-
-              <div className="flex items-center justify-between opacity-50">
-                <div className="flex items-center gap-3">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Email Alerts</p>
-                    <p className="text-xs text-muted-foreground">Get critical alerts via email</p>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
-              </div>
-
-              <div className="flex items-center justify-between opacity-50">
-                <div className="flex items-center gap-3">
-                  <Smartphone className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Push Notifications</p>
-                    <p className="text-xs text-muted-foreground">Browser and mobile push alerts</p>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
-              </div>
-
-              <div className="flex items-center justify-between opacity-50">
-                <div className="flex items-center gap-3">
-                  <Send className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Telegram Bot</p>
-                    <p className="text-xs text-muted-foreground">Instant alerts to your Telegram</p>
-                  </div>
-                </div>
-                <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
-              </div>
-
-              <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
-                Manage detailed notification settings in{" "}
-                <button onClick={() => navigate("/settings")} className="text-primary hover:underline">
-                  Settings
-                </button>
-              </p>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
+      {/* Link to settings for notification prefs */}
+      <div className="rounded-lg border border-border/50 bg-card/50 p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">Notification Preferences</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Configure alert channels and notification settings</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => navigate("/settings")}>
+          Open Settings
+        </Button>
+      </div>
     </div>
   );
 }

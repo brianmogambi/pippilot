@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -78,20 +79,16 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
 
-  // Profile
   const [displayName, setDisplayName] = useState("");
   const [experience, setExperience] = useState("beginner");
   const [tradingStyle, setTradingStyle] = useState("intraday");
 
-  // Trading
   const [defaultTimeframe, setDefaultTimeframe] = useState("H1");
   const [preferredPairs, setPreferredPairs] = useState<string[]>([]);
   const [preferredSessions, setPreferredSessions] = useState<string[]>([]);
 
-  // Strategy
   const [preferredStrategies, setPreferredStrategies] = useState<string[]>([]);
 
-  // Risk
   const [currency, setCurrency] = useState("USD");
   const [brokerName, setBrokerName] = useState("");
   const [accountBalance, setAccountBalance] = useState(10000);
@@ -100,11 +97,9 @@ export default function SettingsPage() {
   const [maxDailyLoss, setMaxDailyLoss] = useState(5);
   const [conservativeMode, setConservativeMode] = useState(false);
 
-  // Notifications
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [alertChannels, setAlertChannels] = useState<string[]>(["in_app"]);
 
-  // Appearance
   const [timezone, setTimezone] = useState("UTC");
 
   useEffect(() => {
@@ -128,7 +123,6 @@ export default function SettingsPage() {
     }
   }, [profile]);
 
-  // Load conservative mode from user_risk_profiles
   useEffect(() => {
     if (!user) return;
     supabase.from("user_risk_profiles").select("conservative_mode").eq("user_id", user.id).maybeSingle()
@@ -177,7 +171,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-3xl">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-3xl pb-mobile-nav">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">Manage your profile, trading preferences, and app settings</p>
@@ -215,9 +209,12 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Trading Style</Label>
-          <select value={tradingStyle} onChange={(e) => setTradingStyle(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-            {STYLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          <Select value={tradingStyle} onValueChange={setTradingStyle}>
+            <SelectTrigger className="bg-muted border-border"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {STYLE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </SectionCard>
 
@@ -302,9 +299,12 @@ export default function SettingsPage() {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Currency</Label>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger className="bg-muted border-border"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Broker Name</Label>
@@ -315,12 +315,12 @@ export default function SettingsPage() {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Default Risk Per Trade (%)</Label>
             <Input type="number" value={defaultRisk} onChange={(e) => setDefaultRisk(Number(e.target.value))} step={0.5} min={0.1} max={10} className="bg-muted border-border" />
-            <p className="text-xs text-muted-foreground">Recommended: 1–2%</p>
+            <p className="text-[10px] text-muted-foreground">Recommended: 1–2%</p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Max Daily Loss (%)</Label>
             <Input type="number" value={maxDailyLoss} onChange={(e) => setMaxDailyLoss(Number(e.target.value))} step={0.5} min={1} max={20} className="bg-muted border-border" />
-            <p className="text-xs text-muted-foreground">Recommended: 3–5%</p>
+            <p className="text-[10px] text-muted-foreground">Recommended: 3–5%</p>
           </div>
         </div>
         <label className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors">
@@ -363,9 +363,12 @@ export default function SettingsPage() {
       <SectionCard icon={Palette} title="Appearance">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Timezone</Label>
-          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-            {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-          </select>
+          <Select value={timezone} onValueChange={setTimezone}>
+            <SelectTrigger className="bg-muted border-border"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIMEZONES.map((tz) => <SelectItem key={tz} value={tz}>{tz}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Theme</Label>
@@ -373,9 +376,12 @@ export default function SettingsPage() {
         </div>
       </SectionCard>
 
-      <Button onClick={handleSave} disabled={saving} className="w-full">
-        <Save className="h-4 w-4 mr-2" /> {saving ? "Saving..." : "Save Settings"}
-      </Button>
+      {/* Sticky save on mobile */}
+      <div className="sticky bottom-16 md:bottom-0 z-30">
+        <Button onClick={handleSave} disabled={saving} className="w-full shadow-lg">
+          <Save className="h-4 w-4 mr-2" /> {saving ? "Saving..." : "Save Settings"}
+        </Button>
+      </div>
     </div>
   );
 }

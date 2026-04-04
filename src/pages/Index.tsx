@@ -1,4 +1,5 @@
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, DollarSign, AlertTriangle, BookOpen, Activity, Lightbulb, Eye, BarChart3, Clock, Circle } from "lucide-react";
+import { useState } from "react";
+import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, DollarSign, AlertTriangle, BookOpen, Activity, Lightbulb, Eye, BarChart3, Clock, Circle, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTradingAccount, useRiskProfile } from "@/hooks/use-account";
@@ -9,6 +10,7 @@ import { useDashboardWatchlist } from "@/hooks/use-watchlist";
 import { useMarketSummary } from "@/hooks/use-market-data";
 import StatCard from "@/components/ui/stat-card";
 import StatusBadge from "@/components/ui/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 
 const beginnerTips = [
@@ -30,14 +32,17 @@ const SectionHeader = ({ title, linkTo, linkText = "View all →" }: { title: st
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { data: account } = useTradingAccount();
+  const { data: account, isLoading: loadingAccount } = useTradingAccount();
   const { data: riskProfile } = useRiskProfile();
-  const { data: signals = [] } = useActiveSignals(6);
+  const { data: signals = [], isLoading: loadingSignals } = useActiveSignals(6);
   const { data: alerts = [] } = useDashboardAlerts(5);
   const { data: journalEntries = [] } = useDashboardJournal(3);
   const { data: journalStats } = useDashboardJournalStats();
   const { data: watchlist = [] } = useDashboardWatchlist(6);
   const marketSummary = useMarketSummary();
+  const [tipDismissed, setTipDismissed] = useState(false);
+
+  const isLoading = loadingAccount || loadingSignals;
 
   const balance = Number(account?.balance ?? 10000);
   const equity = Number(account?.equity ?? 10000);
@@ -68,8 +73,28 @@ const Dashboard = () => {
     return "text-primary";
   };
 
+  if (isLoading) {
+    return (
+      <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-lg" />)}
+        </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <Skeleton className="h-64 rounded-lg" />
+            <Skeleton className="h-48 rounded-lg" />
+          </div>
+          <div className="space-y-6">
+            <Skeleton className="h-64 rounded-lg" />
+            <Skeleton className="h-48 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
       {/* 1. Account Overview */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard label="Balance" value={`$${balance.toLocaleString()}`} icon={Wallet} iconColor="text-primary" />
@@ -115,7 +140,7 @@ const Dashboard = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border text-xs text-muted-foreground">
+                      <tr className="border-b border-border text-xs text-muted-foreground bg-muted/30">
                         <th className="text-left p-3 font-medium">Pair</th>
                         <th className="text-left p-3 font-medium">Dir</th>
                         <th className="text-left p-3 font-medium hidden sm:table-cell">Setup</th>
@@ -276,26 +301,29 @@ const Dashboard = () => {
           </div>
 
           {/* 6. Beginner Insight Card */}
-          <div className="rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 p-4">
-            <div className="flex items-start gap-3">
-              <div className="rounded-full bg-primary/15 p-2 shrink-0">
-                <Lightbulb className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-foreground mb-1">Trading Tip</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">{todayTip}</p>
+          {!tipDismissed && (
+            <div className="rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-4 relative">
+              <button onClick={() => setTipDismissed(true)} className="absolute top-2 right-2 p-1 rounded hover:bg-primary/10 transition-colors">
+                <X className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-primary/15 p-2 shrink-0">
+                  <Lightbulb className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-1">Trading Tip</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{todayTip}</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Disclaimer */}
-      <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-        <p className="text-xs text-muted-foreground leading-relaxed text-center">
-          <strong className="text-primary">⚠️ Disclaimer:</strong> PipPilot AI provides AI-assisted analysis only. This is not financial advice. Trading forex and CFDs carries significant risk of loss. Always use proper risk management and never risk more than you can afford to lose.
-        </p>
-      </div>
+      {/* Disclaimer — subtle footer */}
+      <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed">
+        ⚠️ PipPilot AI provides AI-assisted analysis only — not financial advice. Trading carries significant risk.
+      </p>
     </div>
   );
 };

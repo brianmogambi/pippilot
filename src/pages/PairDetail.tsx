@@ -73,7 +73,7 @@ export default function PairDetail() {
   const structureVariant = (s: MarketStructure) => s === "trending" ? "bullish" as const : s === "breakout" ? "neutral" as const : "bearish" as const;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-5">
+    <div className="p-4 md:p-6 lg:p-8 space-y-5 pb-mobile-nav">
       {/* ───── Section 1 — Header ───── */}
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/watchlist")}><ArrowLeft className="h-4 w-4" /></Button>
@@ -111,10 +111,10 @@ export default function PairDetail() {
                 ))}
               </ToggleGroup>
             </div>
-            <div className="aspect-video flex flex-col items-center justify-center bg-muted/20">
-              <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-2" />
-              <p className="text-sm font-medium text-muted-foreground">TradingView integration coming soon</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Price action & indicator overlays</p>
+            <div className="aspect-video flex flex-col items-center justify-center bg-muted/10 border-2 border-dashed border-border/50 rounded-b-lg">
+              <BarChart3 className="h-12 w-12 text-muted-foreground/20 mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Chart coming soon</p>
+              <p className="text-[11px] text-muted-foreground/60 mt-0.5">TradingView integration with indicator overlays</p>
             </div>
           </div>
 
@@ -328,7 +328,7 @@ export default function PairDetail() {
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground text-center">⚠️ Prices are indicative only. Not financial advice. Trading carries risk.</p>
+      <p className="text-[10px] text-muted-foreground/60 text-center">⚠️ Prices are indicative only. Not financial advice.</p>
     </div>
   );
 }
