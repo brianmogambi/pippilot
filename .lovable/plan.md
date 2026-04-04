@@ -1,55 +1,87 @@
 
 
-# Phase 11 — Settings & Preferences Rebuild
+# Phase 13 — Backend Integration Points
 
-## Database changes
+## Problem
 
-**Migration**: Add 3 new columns to `profiles` table:
-- `default_timeframe` text nullable default `'H1'` — preferred chart timeframe
-- `preferred_strategies` text[] nullable default `'{}'` — list of enabled strategy types
-- `alert_channels` text[] nullable default `'{"in_app"}'` — notification channel preferences
+Data-fetching logic is scattered across page components with inline `useQuery` calls and direct Supabase imports. Mock data types are duplicated (e.g., `Signal` in `mockSignals.ts` vs `DbSignal` in `Signals.tsx` vs auto-generated types in `types.ts`). This makes it hard to swap mock data for real APIs later.
 
-These store strategy and alert channel preferences so they can later influence signal generation and alert routing.
+## Approach
 
-## UI rebuild — `src/pages/SettingsPage.tsx`
+Create a clean service layer: **shared types** → **data hooks** → **pages consume hooks**. Pages will import hooks instead of calling Supabase directly. Mock data files remain but are only consumed through the hooks, making them trivial to replace.
 
-Replace the current 5-tab layout with a **6-section vertical scroll layout** (no tabs — all sections visible, grouped in cards). This is cleaner for settings pages with many fields and avoids hiding content behind tabs.
+## Files to create
 
-### Section 1: Profile
-- Display name, email (read-only), experience level (beginner/intermediate/advanced with inline descriptions), trading style
+### 1. `src/types/trading.ts` — Canonical domain types
 
-### Section 2: Trading Preferences
-- Default timeframe select (M5, M15, H1, H4, D1)
-- Preferred pairs (toggle chips, grouped Major/Minor)
-- Preferred sessions (checkboxes with descriptions)
+Single source of truth for all domain interfaces. Derives from Supabase auto-generated types where possible, adds computed/enriched fields separately.
 
-### Section 3: Strategy Preferences (NEW)
-- Toggle switches for each strategy with beginner-friendly descriptions:
-  - Trend Pullback — "Enter trends during temporary retracements"
-  - Breakout Retest — "Trade breakouts after price retests the level"
-  - Range Reversal — "Fade moves at range boundaries"
-  - Momentum Breakout — "Catch strong directional moves"
-  - S/R Rejection — "Trade bounces off key support/resistance"
+```text
+- Signal (from DB Row + computed riskReward)
+- Alert (from DB Row)  
+- JournalEntry (from DB Row)
+- TradingAccount (from DB Row)
+- UserRiskProfile (from DB Row)
+- Instrument (from DB Row)
+- InstrumentSnapshot (market data — currently mock-only)
+- PairAnalysis (setup analysis — currently mock-only)
+- MarketSummary (dashboard market cards)
+```
 
-### Section 4: Risk Preferences
-- Account balance, equity, currency, broker
-- Default risk %, max daily loss %
-- Conservative mode toggle (reads/writes `user_risk_profiles`)
+### 2. `src/hooks/use-signals.ts`
+- `useSignals(filters?)` — replaces inline query in Signals.tsx
+- `useActiveSignals(limit?)` — replaces inline query in Index.tsx
+- Enrichment logic (riskReward calc, pair analysis merge) stays here
 
-### Section 5: Notification Preferences
-- In-app notifications toggle
-- Alert channel checkboxes: In-App (active), Email (coming soon), Push (coming soon), Telegram (coming soon)
-- Per-type alert toggles (setup forming, entry zone, volatility spike, etc.) — future placeholder section
+### 3. `src/hooks/use-alerts.ts`
+- `useAlerts(filters?)` — replaces inline query in Alerts.tsx
+- `useMarkAlertRead()` — mutation
+- `useMarkAllAlertsRead()` — mutation
+- `useUnreadAlertCount()` — replaces inline query in AppHeader.tsx
 
-### Section 6: Appearance
-- Timezone select
-- Theme (dark default, "coming soon" note)
+### 4. `src/hooks/use-journal.ts`
+- `useJournalEntries()` — replaces inline query in Journal.tsx
+- `useCreateJournalEntry()` — mutation (from JournalEntryForm)
+- `useUpdateJournalEntry()` — mutation
+- `useDeleteJournalEntry()` — mutation
+- `useJournalStats()` — derived computed stats (win rate, avg R, best/worst pair)
 
-### Save behavior
-Single "Save Settings" button at bottom. Updates `profiles` table (and `user_risk_profiles` for conservative mode). Toast on success/error.
+### 5. `src/hooks/use-account.ts`
+- `useTradingAccount()` — replaces inline queries in Index.tsx, AppHeader.tsx
+- `useRiskProfile()` — replaces inline query in Index.tsx, SettingsPage.tsx
+
+### 6. `src/hooks/use-watchlist.ts`
+- `useWatchlist()` — replaces inline query in Watchlist.tsx
+- `useAddToWatchlist()` — mutation
+- `useRemoveFromWatchlist()` — mutation
+- `useInstruments()` — replaces inline query in Watchlist.tsx
+
+### 7. `src/hooks/use-market-data.ts`
+- `useMarketData(symbol)` — wraps `getMarketData()` with a hook interface
+- `usePairAnalysis(symbol)` — wraps `getPairAnalysis()`
+- `useMarketSummary()` — wraps `mockMarketSummary`
+- These are the primary swap points: when a real market data API is integrated, only these hooks change
 
 ## Files to modify
-- `src/pages/SettingsPage.tsx` — full rebuild
-- Database migration — add 3 columns to `profiles`
-- `src/contexts/AuthContext.tsx` — add new fields to Profile interface
+
+- `src/pages/Index.tsx` — replace 4 inline queries with hook calls
+- `src/pages/Signals.tsx` — replace query + enrichment with `useSignals()`; remove local `DbSignal`/`EnrichedSignal` types
+- `src/pages/Alerts.tsx` — replace query + mutations with hook calls; remove local `Alert` type
+- `src/pages/Journal.tsx` — replace query with `useJournalEntries()` + `useJournalStats()`
+- `src/pages/Watchlist.tsx` — replace queries/mutations with hook calls
+- `src/pages/PairDetail.tsx` — use `useMarketData()` / `usePairAnalysis()`
+- `src/components/layout/AppHeader.tsx` — use `useTradingAccount()` + `useUnreadAlertCount()`
+- `src/components/journal/JournalEntryForm.tsx` — use mutation hooks
+- `src/components/journal/JournalDetailDrawer.tsx` — use mutation hooks
+
+## What stays the same
+
+- All UI components, layouts, and styling remain untouched
+- Mock data files (`mockMarketData.ts`, `mockSignals.ts`) remain as data sources consumed by hooks
+- Supabase client import stays in hooks only (not in pages)
+- `react-query` cache keys and invalidation patterns preserved
+
+## Result
+
+After this refactor, connecting a real backend (e.g., Claude-built signal engine) means editing only the hook files — pages and components never need to change.
 
