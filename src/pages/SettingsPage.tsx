@@ -4,16 +4,15 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Save } from "lucide-react";
+import { Save, User, BarChart3, Shield, Bell, Palette, TrendingUp } from "lucide-react";
 
 const EXPERIENCE_OPTIONS = [
-  { value: "beginner", label: "Beginner" },
-  { value: "intermediate", label: "Intermediate" },
-  { value: "advanced", label: "Advanced" },
+  { value: "beginner", label: "Beginner", desc: "New to forex — guided recommendations" },
+  { value: "intermediate", label: "Intermediate", desc: "Familiar with setups and risk management" },
+  { value: "advanced", label: "Advanced", desc: "Full control, minimal hand-holding" },
 ];
 
 const STYLE_OPTIONS = [
@@ -22,14 +21,36 @@ const STYLE_OPTIONS = [
   { value: "swing", label: "Swing" },
 ];
 
+const TIMEFRAMES = [
+  { value: "M5", label: "M5" },
+  { value: "M15", label: "M15" },
+  { value: "H1", label: "H1" },
+  { value: "H4", label: "H4" },
+  { value: "D1", label: "D1" },
+];
+
 const MAJOR_PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "USD/CHF", "AUD/USD", "NZD/USD", "USD/CAD"];
 const MINOR_PAIRS = ["EUR/GBP", "EUR/JPY", "GBP/JPY", "AUD/JPY", "EUR/AUD", "GBP/AUD"];
-const ALL_PAIRS = [...MAJOR_PAIRS, ...MINOR_PAIRS];
 
 const SESSIONS = [
-  { value: "london", label: "London" },
-  { value: "new_york", label: "New York" },
-  { value: "asia", label: "Asia / Tokyo" },
+  { value: "london", label: "London", desc: "08:00–16:00 GMT — highest forex volume" },
+  { value: "new_york", label: "New York", desc: "13:00–21:00 GMT — overlaps with London" },
+  { value: "asia", label: "Asia / Tokyo", desc: "00:00–08:00 GMT — quieter, range-bound" },
+];
+
+const STRATEGIES = [
+  { value: "trend_pullback", label: "Trend Pullback", desc: "Enter trends during temporary retracements" },
+  { value: "breakout_retest", label: "Breakout Retest", desc: "Trade breakouts after price retests the level" },
+  { value: "range_reversal", label: "Range Reversal", desc: "Fade moves at range boundaries" },
+  { value: "momentum_breakout", label: "Momentum Breakout", desc: "Catch strong directional moves" },
+  { value: "sr_rejection", label: "S/R Rejection", desc: "Trade bounces off key support/resistance" },
+];
+
+const ALERT_CHANNELS = [
+  { value: "in_app", label: "In-App", available: true },
+  { value: "email", label: "Email", available: false },
+  { value: "push", label: "Push", available: false },
+  { value: "telegram", label: "Telegram", available: false },
 ];
 
 const CURRENCIES = ["USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CHF", "NZD"];
@@ -40,23 +61,50 @@ const TIMEZONES = [
   "Asia/Shanghai", "Asia/Singapore", "Australia/Sydney",
 ];
 
+function SectionCard({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <h2 className="font-semibold text-foreground">{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { profile, user, refetchProfile } = useAuth();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
 
+  // Profile
   const [displayName, setDisplayName] = useState("");
   const [experience, setExperience] = useState("beginner");
   const [tradingStyle, setTradingStyle] = useState("intraday");
+
+  // Trading
+  const [defaultTimeframe, setDefaultTimeframe] = useState("H1");
+  const [preferredPairs, setPreferredPairs] = useState<string[]>([]);
+  const [preferredSessions, setPreferredSessions] = useState<string[]>([]);
+
+  // Strategy
+  const [preferredStrategies, setPreferredStrategies] = useState<string[]>([]);
+
+  // Risk
   const [currency, setCurrency] = useState("USD");
   const [brokerName, setBrokerName] = useState("");
   const [accountBalance, setAccountBalance] = useState(10000);
   const [accountEquity, setAccountEquity] = useState(10000);
   const [defaultRisk, setDefaultRisk] = useState(1);
   const [maxDailyLoss, setMaxDailyLoss] = useState(5);
-  const [preferredPairs, setPreferredPairs] = useState<string[]>([]);
-  const [preferredSessions, setPreferredSessions] = useState<string[]>([]);
+  const [conservativeMode, setConservativeMode] = useState(false);
+
+  // Notifications
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [alertChannels, setAlertChannels] = useState<string[]>(["in_app"]);
+
+  // Appearance
   const [timezone, setTimezone] = useState("UTC");
 
   useEffect(() => {
@@ -64,6 +112,7 @@ export default function SettingsPage() {
       setDisplayName(profile.display_name || "");
       setExperience(profile.experience_level || "beginner");
       setTradingStyle(profile.trading_style || "intraday");
+      setDefaultTimeframe(profile.default_timeframe || "H1");
       setCurrency(profile.account_currency || "USD");
       setBrokerName(profile.broker_name || "");
       setAccountBalance(profile.account_size || 10000);
@@ -72,25 +121,33 @@ export default function SettingsPage() {
       setMaxDailyLoss(profile.max_daily_loss_pct || 5);
       setPreferredPairs(profile.preferred_pairs || []);
       setPreferredSessions(profile.preferred_sessions || []);
+      setPreferredStrategies(profile.preferred_strategies || []);
       setNotificationsEnabled(profile.notifications_enabled ?? true);
+      setAlertChannels(profile.alert_channels || ["in_app"]);
       setTimezone(profile.timezone || "UTC");
     }
   }, [profile]);
 
-  const togglePair = (pair: string) =>
-    setPreferredPairs((p) => (p.includes(pair) ? p.filter((x) => x !== pair) : [...p, pair]));
-  const toggleSession = (s: string) =>
-    setPreferredSessions((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
+  // Load conservative mode from user_risk_profiles
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_risk_profiles").select("conservative_mode").eq("user_id", user.id).maybeSingle()
+      .then(({ data }) => { if (data) setConservativeMode(data.conservative_mode); });
+  }, [user]);
+
+  const toggleItem = (list: string[], setList: (v: string[]) => void, item: string) =>
+    setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
 
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
+
+    const [profileResult, riskResult] = await Promise.all([
+      supabase.from("profiles").update({
         display_name: displayName,
         experience_level: experience,
         trading_style: tradingStyle,
+        default_timeframe: defaultTimeframe,
         account_currency: currency,
         broker_name: brokerName || null,
         account_size: accountBalance,
@@ -99,12 +156,18 @@ export default function SettingsPage() {
         max_daily_loss_pct: maxDailyLoss,
         preferred_pairs: preferredPairs,
         preferred_sessions: preferredSessions,
+        preferred_strategies: preferredStrategies,
         notifications_enabled: notificationsEnabled,
-        timezone: timezone,
-      })
-      .eq("user_id", user.id);
+        alert_channels: alertChannels,
+        timezone,
+      }).eq("user_id", user.id),
+      supabase.from("user_risk_profiles").update({
+        conservative_mode: conservativeMode,
+      }).eq("user_id", user.id),
+    ]);
 
     setSaving(false);
+    const error = profileResult.error || riskResult.error;
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
@@ -117,128 +180,198 @@ export default function SettingsPage() {
     <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your profile, risk preferences, and app settings</p>
+        <p className="text-sm text-muted-foreground mt-1">Manage your profile, trading preferences, and app settings</p>
       </div>
 
-      <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="bg-muted">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="risk">Risk</TabsTrigger>
-          <TabsTrigger value="trading">Trading</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="display">Display</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="profile" className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <h2 className="font-semibold text-foreground">Profile</h2>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Display Name</Label>
-            <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-muted border-border" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Experience Level</Label>
-            <select value={experience} onChange={(e) => setExperience(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-              {EXPERIENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Trading Style</Label>
-            <select value={tradingStyle} onChange={(e) => setTradingStyle(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-              {STYLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="risk" className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <h2 className="font-semibold text-foreground">Risk Preferences</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Account Balance ({currency})</Label>
-              <Input type="number" value={accountBalance} onChange={(e) => setAccountBalance(Number(e.target.value))} className="bg-muted border-border" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Account Equity ({currency})</Label>
-              <Input type="number" value={accountEquity} onChange={(e) => setAccountEquity(Number(e.target.value))} className="bg-muted border-border" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Currency</Label>
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Broker Name</Label>
-              <Input value={brokerName} onChange={(e) => setBrokerName(e.target.value)} placeholder="Optional" className="bg-muted border-border" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Default Risk Per Trade (%)</Label>
-              <Input type="number" value={defaultRisk} onChange={(e) => setDefaultRisk(Number(e.target.value))} step={0.5} min={0.1} max={10} className="bg-muted border-border" />
-              <p className="text-xs text-muted-foreground">Recommended: 1–2%</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Max Daily Loss (%)</Label>
-              <Input type="number" value={maxDailyLoss} onChange={(e) => setMaxDailyLoss(Number(e.target.value))} step={0.5} min={1} max={20} className="bg-muted border-border" />
-              <p className="text-xs text-muted-foreground">Recommended: 3–5%</p>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="trading" className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <h2 className="font-semibold text-foreground">Trading Preferences</h2>
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Preferred Pairs</Label>
-            <div className="flex flex-wrap gap-2">
-              {ALL_PAIRS.map((pair) => (
-                <button
-                  key={pair}
-                  onClick={() => togglePair(pair)}
-                  className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${preferredPairs.includes(pair) ? "border-primary bg-primary/15 text-primary" : "border-border bg-muted/50 text-muted-foreground hover:border-muted-foreground/30"}`}
-                >
-                  {pair}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Preferred Sessions</Label>
-            {SESSIONS.map((s) => (
-              <label key={s.value} className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors">
-                <Checkbox checked={preferredSessions.includes(s.value)} onCheckedChange={() => toggleSession(s.value)} />
-                <span className="text-sm text-foreground">{s.label}</span>
+      {/* Section 1: Profile */}
+      <SectionCard icon={User} title="Profile">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Display Name</Label>
+          <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="bg-muted border-border" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Email</Label>
+          <Input value={user?.email || ""} disabled className="bg-muted/50 border-border opacity-60" />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Experience Level</Label>
+          <div className="grid gap-2">
+            {EXPERIENCE_OPTIONS.map((o) => (
+              <label
+                key={o.value}
+                className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${experience === o.value ? "border-primary bg-primary/10" : "border-border bg-muted/50 hover:border-muted-foreground/30"}`}
+                onClick={() => setExperience(o.value)}
+              >
+                <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${experience === o.value ? "border-primary" : "border-muted-foreground/40"}`}>
+                  {experience === o.value && <div className="h-2 w-2 rounded-full bg-primary" />}
+                </div>
+                <div>
+                  <span className="text-sm font-medium text-foreground">{o.label}</span>
+                  <p className="text-xs text-muted-foreground">{o.desc}</p>
+                </div>
               </label>
             ))}
           </div>
-        </TabsContent>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Trading Style</Label>
+          <select value={tradingStyle} onChange={(e) => setTradingStyle(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
+            {STYLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      </SectionCard>
 
-        <TabsContent value="notifications" className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <h2 className="font-semibold text-foreground">Notifications</h2>
-          <label className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-foreground">Enable Notifications</p>
-              <p className="text-xs text-muted-foreground">Receive alerts when new signals match your preferences</p>
-            </div>
-            <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
-          </label>
-        </TabsContent>
+      {/* Section 2: Trading Preferences */}
+      <SectionCard icon={BarChart3} title="Trading Preferences">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Default Timeframe</Label>
+          <div className="flex gap-2">
+            {TIMEFRAMES.map((tf) => (
+              <button
+                key={tf.value}
+                onClick={() => setDefaultTimeframe(tf.value)}
+                className={`rounded-md border px-4 py-2 text-xs font-medium transition-colors ${defaultTimeframe === tf.value ? "border-primary bg-primary/15 text-primary" : "border-border bg-muted/50 text-muted-foreground hover:border-muted-foreground/30"}`}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Preferred Pairs — Majors</Label>
+          <div className="flex flex-wrap gap-2">
+            {MAJOR_PAIRS.map((pair) => (
+              <button key={pair} onClick={() => toggleItem(preferredPairs, setPreferredPairs, pair)}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${preferredPairs.includes(pair) ? "border-primary bg-primary/15 text-primary" : "border-border bg-muted/50 text-muted-foreground hover:border-muted-foreground/30"}`}>
+                {pair}
+              </button>
+            ))}
+          </div>
+          <Label className="text-xs text-muted-foreground">Minors</Label>
+          <div className="flex flex-wrap gap-2">
+            {MINOR_PAIRS.map((pair) => (
+              <button key={pair} onClick={() => toggleItem(preferredPairs, setPreferredPairs, pair)}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${preferredPairs.includes(pair) ? "border-primary bg-primary/15 text-primary" : "border-border bg-muted/50 text-muted-foreground hover:border-muted-foreground/30"}`}>
+                {pair}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Preferred Sessions</Label>
+          {SESSIONS.map((s) => (
+            <label key={s.value} className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors">
+              <Checkbox checked={preferredSessions.includes(s.value)} onCheckedChange={() => toggleItem(preferredSessions, setPreferredSessions, s.value)} />
+              <div>
+                <span className="text-sm text-foreground">{s.label}</span>
+                <p className="text-xs text-muted-foreground">{s.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      </SectionCard>
 
-        <TabsContent value="display" className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <h2 className="font-semibold text-foreground">Display</h2>
+      {/* Section 3: Strategy Preferences */}
+      <SectionCard icon={TrendingUp} title="Strategy Preferences">
+        <p className="text-xs text-muted-foreground">Enable the strategies PipPilot AI should prioritise in signal generation.</p>
+        <div className="space-y-2">
+          {STRATEGIES.map((s) => (
+            <label key={s.value} className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors">
+              <div>
+                <span className="text-sm font-medium text-foreground">{s.label}</span>
+                <p className="text-xs text-muted-foreground">{s.desc}</p>
+              </div>
+              <Switch checked={preferredStrategies.includes(s.value)} onCheckedChange={() => toggleItem(preferredStrategies, setPreferredStrategies, s.value)} />
+            </label>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Section 4: Risk Preferences */}
+      <SectionCard icon={Shield} title="Risk Preferences">
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Timezone</Label>
-            <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
-              {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+            <Label className="text-xs text-muted-foreground">Account Balance ({currency})</Label>
+            <Input type="number" value={accountBalance} onChange={(e) => setAccountBalance(Number(e.target.value))} className="bg-muted border-border" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Account Equity ({currency})</Label>
+            <Input type="number" value={accountEquity} onChange={(e) => setAccountEquity(Number(e.target.value))} className="bg-muted border-border" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Currency</Label>
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Theme</Label>
-            <p className="text-xs text-muted-foreground">Dark mode is currently the default. Theme switching coming soon.</p>
+            <Label className="text-xs text-muted-foreground">Broker Name</Label>
+            <Input value={brokerName} onChange={(e) => setBrokerName(e.target.value)} placeholder="Optional" className="bg-muted border-border" />
           </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Default Risk Per Trade (%)</Label>
+            <Input type="number" value={defaultRisk} onChange={(e) => setDefaultRisk(Number(e.target.value))} step={0.5} min={0.1} max={10} className="bg-muted border-border" />
+            <p className="text-xs text-muted-foreground">Recommended: 1–2%</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Max Daily Loss (%)</Label>
+            <Input type="number" value={maxDailyLoss} onChange={(e) => setMaxDailyLoss(Number(e.target.value))} step={0.5} min={1} max={20} className="bg-muted border-border" />
+            <p className="text-xs text-muted-foreground">Recommended: 3–5%</p>
+          </div>
+        </div>
+        <label className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors">
+          <div>
+            <span className="text-sm font-medium text-foreground">Conservative Mode</span>
+            <p className="text-xs text-muted-foreground">Tighter risk limits — caps position sizes and reduces max open risk</p>
+          </div>
+          <Switch checked={conservativeMode} onCheckedChange={setConservativeMode} />
+        </label>
+      </SectionCard>
+
+      {/* Section 5: Notification Preferences */}
+      <SectionCard icon={Bell} title="Notification Preferences">
+        <label className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-foreground">Enable Notifications</p>
+            <p className="text-xs text-muted-foreground">Receive alerts when new signals match your preferences</p>
+          </div>
+          <Switch checked={notificationsEnabled} onCheckedChange={setNotificationsEnabled} />
+        </label>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Alert Channels</Label>
+          {ALERT_CHANNELS.map((ch) => (
+            <label key={ch.value} className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3 cursor-pointer hover:border-muted-foreground/30 transition-colors">
+              <Checkbox
+                checked={alertChannels.includes(ch.value)}
+                onCheckedChange={() => ch.available && toggleItem(alertChannels, setAlertChannels, ch.value)}
+                disabled={!ch.available}
+              />
+              <div className="flex items-center gap-2">
+                <span className={`text-sm ${ch.available ? "text-foreground" : "text-muted-foreground"}`}>{ch.label}</span>
+                {!ch.available && <span className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">Coming soon</span>}
+              </div>
+            </label>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* Section 6: Appearance */}
+      <SectionCard icon={Palette} title="Appearance">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Timezone</Label>
+          <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className="flex h-10 w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground">
+            {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Theme</Label>
+          <p className="text-xs text-muted-foreground">Dark mode is currently the default. Theme switching coming soon.</p>
+        </div>
+      </SectionCard>
 
       <Button onClick={handleSave} disabled={saving} className="w-full">
         <Save className="h-4 w-4 mr-2" /> {saving ? "Saving..." : "Save Settings"}
