@@ -73,7 +73,7 @@ export default function PairDetail() {
   const structureVariant = (s: MarketStructure) => s === "trending" ? "bullish" as const : s === "breakout" ? "neutral" as const : "bearish" as const;
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-5">
+    <div className="p-4 md:p-6 lg:p-8 space-y-5 pb-mobile-nav">
       {/* ───── Section 1 — Header ───── */}
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/watchlist")}><ArrowLeft className="h-4 w-4" /></Button>
