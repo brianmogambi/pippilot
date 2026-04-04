@@ -1,50 +1,9 @@
-export type TrendDirection = "bullish" | "bearish" | "neutral";
-export type VolatilityLevel = "Low" | "Med" | "High";
-export type SessionName = "London" | "New York" | "Asia" | "Closed";
-export type MarketStructure = "trending" | "ranging" | "breakout";
-export type SetupQuality = "A+" | "A" | "B" | "C";
-export type Verdict = "trade" | "no_trade";
+import type {
+  MarketData, PairAnalysis, VolatilityLevel, TrendDirection, SessionName, MarketStructure,
+} from "@/types/trading";
 
-export interface MarketData {
-  symbol: string;
-  price: number;
-  spread: number;
-  dailyChange: number;
-  dailyChangePct: number;
-  atr: number;
-  volatility: VolatilityLevel;
-  trendH1: TrendDirection;
-  trendH4: TrendDirection;
-  trendD1: TrendDirection;
-  activeSession: SessionName;
-  newsRisk: boolean;
-  supportLevel: number;
-  resistanceLevel: number;
-  sessionHigh: number;
-  sessionLow: number;
-  prevDayHigh: number;
-  prevDayLow: number;
-  marketStructure: MarketStructure;
-}
-
-export interface PairAnalysis {
-  setupType: string;
-  direction: "long" | "short";
-  entryZone: [number, number];
-  stopLoss: number;
-  tp1: number;
-  tp2: number;
-  tp3: number;
-  confidence: number;
-  setupQuality: SetupQuality;
-  invalidation: string;
-  beginnerExplanation: string;
-  expertExplanation: string;
-  reasonsFor: string[];
-  reasonsAgainst: string[];
-  noTradeReason: string | null;
-  verdict: Verdict;
-}
+// Re-export types for backward compatibility with existing consumers
+export type { MarketData, PairAnalysis, TrendDirection, VolatilityLevel, SessionName, MarketStructure, SetupQuality, Verdict } from "@/types/trading";
 
 export const mockMarketData: Record<string, MarketData> = {
   "EUR/USD": { symbol: "EUR/USD", price: 1.0872, spread: 0.8, dailyChange: 0.0023, dailyChangePct: 0.21, atr: 0.0068, volatility: "Med", trendH1: "bullish", trendH4: "bullish", trendD1: "neutral", activeSession: "London", newsRisk: true, supportLevel: 1.0835, resistanceLevel: 1.0920, sessionHigh: 1.0895, sessionLow: 1.0848, prevDayHigh: 1.0901, prevDayLow: 1.0840, marketStructure: "trending" },

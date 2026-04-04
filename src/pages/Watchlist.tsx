@@ -10,7 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "@/components/ui/empty-state";
 import StatusBadge from "@/components/ui/status-badge";
-import { getMarketData, type TrendDirection } from "@/data/mockMarketData";
+import { useAllMarketData } from "@/hooks/use-market-data";
+import { getMarketData as getMockMarketData } from "@/data/mockMarketData";
+import type { TrendDirection } from "@/types/trading";
 
 const TrendIcon = ({ dir }: { dir: TrendDirection }) => {
   if (dir === "bullish") return <TrendingUp className="h-3 w-3 text-bullish" />;
@@ -32,6 +34,7 @@ export default function Watchlist() {
   const { data: instruments = [], isLoading: loadingInstruments } = useInstruments();
   const { data: watchlist = [] } = useWatchlist();
   const { data: activeSignals = [] } = useActiveSignals(100);
+  const { data: liveMarketData } = useAllMarketData();
   const addMutation = useAddToWatchlist();
   const removeMutation = useRemoveFromWatchlist();
 
@@ -51,7 +54,7 @@ export default function Watchlist() {
 
   const rows = useMemo(() => {
     let list = instruments.map((i) => {
-      const md = getMarketData(i.symbol);
+      const md = liveMarketData?.[i.symbol] ?? getMockMarketData(i.symbol);
       const sig = signalMap[i.symbol];
       return { symbol: i.symbol, isFav: favSet.has(i.symbol), ...md, signal: sig ?? null };
     });
@@ -65,7 +68,7 @@ export default function Watchlist() {
     if (filterVol !== "all") list = list.filter((r) => r.volatility === filterVol);
 
     return list;
-  }, [instruments, search, favOnly, filterSignal, filterSession, filterTrend, filterVol, favSet, signalMap]);
+  }, [instruments, search, favOnly, filterSignal, filterSession, filterTrend, filterVol, favSet, signalMap, liveMarketData]);
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-4 pb-mobile-nav">

@@ -1,5 +1,61 @@
 import type { Tables } from "@/integrations/supabase/types";
-import type { PairAnalysis } from "@/data/mockMarketData";
+
+// ── Domain types ────────────────────────────────────────────────
+export type TrendDirection = "bullish" | "bearish" | "neutral";
+export type VolatilityLevel = "Low" | "Med" | "High";
+export type SessionName = "London" | "New York" | "Asia" | "Closed";
+export type MarketStructure = "trending" | "ranging" | "breakout";
+export type SetupQuality = "A+" | "A" | "B" | "C";
+export type Verdict = "trade" | "no_trade";
+
+export interface MarketData {
+  symbol: string;
+  price: number;
+  spread: number;
+  dailyChange: number;
+  dailyChangePct: number;
+  atr: number;
+  volatility: VolatilityLevel;
+  trendH1: TrendDirection;
+  trendH4: TrendDirection;
+  trendD1: TrendDirection;
+  activeSession: SessionName;
+  newsRisk: boolean;
+  supportLevel: number;
+  resistanceLevel: number;
+  sessionHigh: number;
+  sessionLow: number;
+  prevDayHigh: number;
+  prevDayLow: number;
+  marketStructure: MarketStructure;
+}
+
+export interface PairAnalysis {
+  setupType: string;
+  direction: "long" | "short";
+  entryZone: [number, number];
+  stopLoss: number;
+  tp1: number;
+  tp2: number;
+  tp3: number;
+  confidence: number;
+  setupQuality: SetupQuality;
+  invalidation: string;
+  beginnerExplanation: string;
+  expertExplanation: string;
+  reasonsFor: string[];
+  reasonsAgainst: string[];
+  noTradeReason: string | null;
+  verdict: Verdict;
+}
+
+export interface MarketSummary {
+  pair: string;
+  price: number;
+  change: number;
+  changePct: number;
+  sentiment: "bullish" | "bearish" | "neutral";
+}
 
 // ── DB Row aliases ──────────────────────────────────────────────
 export type Signal = Tables<"signals">;
@@ -14,17 +70,6 @@ export type EnrichedSignal = Signal & {
   analysis: PairAnalysis | null;
   riskReward: number;
 };
-
-// ── Mock-only types (will be replaced by real APIs) ─────────────
-export type { MarketData, PairAnalysis, TrendDirection, VolatilityLevel, SessionName, MarketStructure, SetupQuality, Verdict } from "@/data/mockMarketData";
-
-export interface MarketSummary {
-  pair: string;
-  price: number;
-  change: number;
-  changePct: number;
-  sentiment: "bullish" | "bearish" | "neutral";
-}
 
 // ── Journal stats (derived) ─────────────────────────────────────
 export interface JournalStats {

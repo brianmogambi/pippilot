@@ -118,6 +118,75 @@ export type Database = {
         }
         Relationships: []
       }
+      market_data_cache: {
+        Row: {
+          symbol: string
+          price: number
+          spread: number
+          daily_change: number
+          daily_change_pct: number
+          atr: number
+          volatility: string
+          trend_h1: string
+          trend_h4: string
+          trend_d1: string
+          active_session: string
+          news_risk: boolean
+          support_level: number
+          resistance_level: number
+          session_high: number
+          session_low: number
+          prev_day_high: number
+          prev_day_low: number
+          market_structure: string
+          updated_at: string
+        }
+        Insert: {
+          symbol: string
+          price?: number
+          spread?: number
+          daily_change?: number
+          daily_change_pct?: number
+          atr?: number
+          volatility?: string
+          trend_h1?: string
+          trend_h4?: string
+          trend_d1?: string
+          active_session?: string
+          news_risk?: boolean
+          support_level?: number
+          resistance_level?: number
+          session_high?: number
+          session_low?: number
+          prev_day_high?: number
+          prev_day_low?: number
+          market_structure?: string
+          updated_at?: string
+        }
+        Update: {
+          symbol?: string
+          price?: number
+          spread?: number
+          daily_change?: number
+          daily_change_pct?: number
+          atr?: number
+          volatility?: string
+          trend_h1?: string
+          trend_h4?: string
+          trend_d1?: string
+          active_session?: string
+          news_risk?: boolean
+          support_level?: number
+          resistance_level?: number
+          session_high?: number
+          session_low?: number
+          prev_day_high?: number
+          prev_day_low?: number
+          market_structure?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           account_currency: string
