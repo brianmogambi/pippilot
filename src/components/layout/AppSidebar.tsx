@@ -9,8 +9,10 @@ import {
   Settings,
   Activity,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/use-admin";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
