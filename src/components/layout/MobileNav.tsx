@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Eye, TrendingUp, Bell, BookOpen, Settings,
+  LayoutDashboard, Eye, TrendingUp, Bell, BookOpen, GraduationCap,
 } from "lucide-react";
 
 const navItems = [
@@ -9,7 +9,7 @@ const navItems = [
   { to: "/signals", icon: TrendingUp, label: "Signals" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/journal", icon: BookOpen, label: "Journal" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/learn", icon: GraduationCap, label: "Learn" },
 ];
 
 export default function MobileNav() {

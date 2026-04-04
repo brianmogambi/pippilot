@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Eye, TrendingUp, Calculator, Bell,
-  BookOpen, Settings, Activity, LogOut, ShieldCheck,
+  BookOpen, Settings, Activity, LogOut, ShieldCheck, GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsAdmin } from "@/hooks/use-admin";
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/calculator", icon: Calculator, label: "Calculator" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/journal", icon: BookOpen, label: "Journal" },
+  { to: "/learn", icon: GraduationCap, label: "Learn" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

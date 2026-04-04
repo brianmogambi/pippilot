@@ -21,6 +21,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import AdminReview from "./pages/AdminReview";
+import Learn from "./pages/Learn";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/journal" element={<Journal />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/learn" element={<Learn />} />
               <Route path="/admin" element={<AdminReview />} />
             </Route>
             <Route path="*" element={<NotFound />} />
