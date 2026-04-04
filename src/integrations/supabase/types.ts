@@ -235,18 +235,24 @@ export type Database = {
       trade_journal_entries: {
         Row: {
           closed_at: string | null
+          confidence: number | null
           created_at: string
           direction: string
+          emotional_notes: string | null
           entry_price: number
           exit_price: number | null
           followed_plan: boolean
           id: string
+          lesson_learned: string | null
           lot_size: number | null
           notes: string | null
           opened_at: string
           pair: string
           result_amount: number | null
           result_pips: number | null
+          screenshot_url: string | null
+          setup_reasoning: string | null
+          setup_type: string | null
           status: string
           stop_loss: number | null
           take_profit: number | null
@@ -255,18 +261,24 @@ export type Database = {
         }
         Insert: {
           closed_at?: string | null
+          confidence?: number | null
           created_at?: string
           direction: string
+          emotional_notes?: string | null
           entry_price: number
           exit_price?: number | null
           followed_plan?: boolean
           id?: string
+          lesson_learned?: string | null
           lot_size?: number | null
           notes?: string | null
           opened_at?: string
           pair: string
           result_amount?: number | null
           result_pips?: number | null
+          screenshot_url?: string | null
+          setup_reasoning?: string | null
+          setup_type?: string | null
           status?: string
           stop_loss?: number | null
           take_profit?: number | null
@@ -275,18 +287,24 @@ export type Database = {
         }
         Update: {
           closed_at?: string | null
+          confidence?: number | null
           created_at?: string
           direction?: string
+          emotional_notes?: string | null
           entry_price?: number
           exit_price?: number | null
           followed_plan?: boolean
           id?: string
+          lesson_learned?: string | null
           lot_size?: number | null
           notes?: string | null
           opened_at?: string
           pair?: string
           result_amount?: number | null
           result_pips?: number | null
+          screenshot_url?: string | null
+          setup_reasoning?: string | null
+          setup_type?: string | null
           status?: string
           stop_loss?: number | null
           take_profit?: number | null
