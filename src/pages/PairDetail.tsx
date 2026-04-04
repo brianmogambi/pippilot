@@ -1,7 +1,4 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 import { ArrowLeft, Star, AlertTriangle, TrendingUp, TrendingDown, Minus, BarChart3, Ban, Bell, BellOff, Activity, Layers, Zap, CheckCircle2, XCircle, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { getMarketData, getPairAnalysis, type TrendDirection, type MarketStructure } from "@/data/mockMarketData";
+import { useMarketData, usePairAnalysis } from "@/hooks/use-market-data";
+import { useWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/use-watchlist";
+import { useSignalsByPair } from "@/hooks/use-signals";
+import { useJournalByPair } from "@/hooks/use-journal";
+import type { TrendDirection, MarketStructure } from "@/types/trading";
 
 /* ───────────── small sub-components ───────────── */
 
@@ -45,62 +46,20 @@ export default function PairDetail() {
   const { pair } = useParams<{ pair: string }>();
   const decodedPair = decodeURIComponent(pair ?? "");
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const md = getMarketData(decodedPair);
-  const analysis = getPairAnalysis(decodedPair);
+  const md = useMarketData(decodedPair);
+  const analysis = usePairAnalysis(decodedPair);
   const [timeframe, setTimeframe] = useState("1H");
   const [alerts, setAlerts] = useState({ entry: false, confirmation: false, tpsl: false });
   const fmt = (v: number) => v.toFixed(md.price > 100 ? 2 : 4);
 
-  /* ── queries ── */
-  const { data: watchlist = [] } = useQuery({
-    queryKey: ["watchlist", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_watchlist").select("*");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: signals = [], isLoading: loadingSignals } = useQuery({
-    queryKey: ["signals-pair", decodedPair],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("signals").select("*").eq("pair", decodedPair).eq("status", "active");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: journalEntries = [] } = useQuery({
-    queryKey: ["journal-pair", decodedPair],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("trade_journal_entries").select("*").eq("pair", decodedPair).order("opened_at", { ascending: false }).limit(5);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+  /* ── queries via hooks ── */
+  const { data: watchlist = [] } = useWatchlist();
+  const { data: signals = [], isLoading: loadingSignals } = useSignalsByPair(decodedPair);
+  const { data: journalEntries = [] } = useJournalByPair(decodedPair);
 
   const isFav = watchlist.some((w) => w.pair === decodedPair);
-
-  const addMut = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("user_watchlist").insert({ user_id: user!.id, pair: decodedPair });
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["watchlist"] }); toast.success("Added to watchlist"); },
-  });
-
-  const removeMut = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("user_watchlist").delete().eq("user_id", user!.id).eq("pair", decodedPair);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["watchlist"] }); toast.success("Removed from watchlist"); },
-  });
+  const addMut = useAddToWatchlist();
+  const removeMut = useRemoveFromWatchlist();
 
   const toggleAlert = (key: keyof typeof alerts) => {
     setAlerts((prev) => {
@@ -130,7 +89,7 @@ export default function PairDetail() {
           <StatusBadge variant={md.activeSession === "Closed" ? "expired" : "active"} className="text-[10px]">{md.activeSession}</StatusBadge>
           {md.newsRisk && <AlertTriangle className="h-4 w-4 text-warning" />}
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => isFav ? removeMut.mutate() : addMut.mutate()}>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => isFav ? removeMut.mutate(decodedPair) : addMut.mutate(decodedPair)}>
           <Star className={`h-3.5 w-3.5 ${isFav ? "fill-warning text-warning" : ""}`} />
           {isFav ? "Favorited" : "Favorite"}
         </Button>
@@ -263,7 +222,7 @@ export default function PairDetail() {
                       <StatusBadge variant={j.direction === "long" ? "bullish" : "bearish"}>{j.direction}</StatusBadge>
                       <span className="text-sm text-foreground">{new Date(j.opened_at).toLocaleDateString()}</span>
                     </div>
-                    <StatusBadge variant={j.status === "open" ? "active" : j.result_pips && Number(j.result_pips) >= 0 ? "bullish" : "bearish"}>
+                    <StatusBadge variant={j.status === "open" ? "active" : Number(j.result_pips ?? 0) >= 0 ? "bullish" : "bearish"}>
                       {j.status === "open" ? "Open" : `${Number(j.result_pips ?? 0) >= 0 ? "+" : ""}${j.result_pips ?? 0} pips`}
                     </StatusBadge>
                   </div>

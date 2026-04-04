@@ -6,9 +6,10 @@ import {
   LogOut, Ban, Zap, Newspaper, TriangleAlert, Settings,
   Mail, Smartphone, Send,
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts, useMarkAlertRead, useMarkAllAlertsRead } from "@/hooks/use-alerts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
 // ── Alert type config ──────────────────────────────────────────────
@@ -40,27 +40,9 @@ const severityStyles: Record<string, { border: string; bg: string; text: string 
   critical: { border: "border-l-destructive", bg: "bg-destructive/10", text: "text-destructive" },
 };
 
-type Alert = {
-  id: string;
-  user_id: string;
-  signal_id: string;
-  pair: string;
-  timeframe?: string | null;
-  condition: string;
-  status: string;
-  type: string;
-  title: string | null;
-  message: string | null;
-  severity: string;
-  is_read: boolean;
-  created_at: string;
-  triggered_at: string | null;
-};
-
 export default function Alerts() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   // ── Filters ──────────────────────────────────────────────────────
   const [typeFilter, setTypeFilter] = useState("all");
@@ -69,18 +51,7 @@ export default function Alerts() {
   const [pairFilter, setPairFilter] = useState("all");
 
   // ── Data ─────────────────────────────────────────────────────────
-  const { data: alerts = [], isLoading } = useQuery({
-    queryKey: ["alerts", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("alerts")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as Alert[];
-    },
-    enabled: !!user,
-  });
+  const { data: alerts = [], isLoading } = useAlerts();
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -97,28 +68,8 @@ export default function Alerts() {
   });
 
   // ── Mutations ────────────────────────────────────────────────────
-  const markRead = useMutation({
-    mutationFn: async (alertId: string) => {
-      const { error } = await supabase.from("alerts").update({ is_read: true }).eq("id", alertId);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
-  });
-
-  const markAllRead = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("alerts")
-        .update({ is_read: true })
-        .eq("user_id", user!.id)
-        .eq("is_read", false);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["alerts"] });
-      toast.success("All alerts marked as read");
-    },
-  });
+  const markRead = useMarkAlertRead();
+  const markAllRead = useMarkAllAlertsRead();
 
   // ── Derived data ─────────────────────────────────────────────────
   const pairs = useMemo(() => [...new Set(alerts.map((a) => a.pair))].sort(), [alerts]);
@@ -260,12 +211,10 @@ export default function Alerts() {
                 key={alert.id}
                 className={`group flex items-start gap-3 rounded-lg border border-border/60 bg-card p-4 transition-colors hover:bg-card/80 border-l-[3px] ${sev.border} ${!alert.is_read ? "bg-card" : "opacity-70"}`}
               >
-                {/* Icon */}
                 <div className={`p-2 rounded-lg shrink-0 ${sev.bg}`}>
                   <TypeIcon className={`h-4 w-4 ${sev.text}`} />
                 </div>
 
-                {/* Body */}
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     {!alert.is_read && (
@@ -291,7 +240,6 @@ export default function Alerts() {
                   </p>
                 </div>
 
-                {/* Actions + timestamp */}
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                     {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
@@ -343,7 +291,6 @@ export default function Alerts() {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="p-4 pt-0 space-y-4">
-              {/* In-App */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Bell className="h-4 w-4 text-muted-foreground" />
@@ -355,7 +302,6 @@ export default function Alerts() {
                 <Switch checked={profile?.notifications_enabled ?? true} disabled />
               </div>
 
-              {/* Email */}
               <div className="flex items-center justify-between opacity-50">
                 <div className="flex items-center gap-3">
                   <Mail className="h-4 w-4 text-muted-foreground" />
@@ -367,7 +313,6 @@ export default function Alerts() {
                 <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
               </div>
 
-              {/* Push */}
               <div className="flex items-center justify-between opacity-50">
                 <div className="flex items-center gap-3">
                   <Smartphone className="h-4 w-4 text-muted-foreground" />
@@ -379,7 +324,6 @@ export default function Alerts() {
                 <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
               </div>
 
-              {/* Telegram */}
               <div className="flex items-center justify-between opacity-50">
                 <div className="flex items-center gap-3">
                   <Send className="h-4 w-4 text-muted-foreground" />

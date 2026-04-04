@@ -1,8 +1,6 @@
 import { useState, useMemo } from "react";
 import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useJournalEntries, useJournalStats } from "@/hooks/use-journal";
 import StatusBadge from "@/components/ui/status-badge";
 import StatCard from "@/components/ui/stat-card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,66 +10,27 @@ import JournalDetailDrawer from "@/components/journal/JournalDetailDrawer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Journal() {
-  const { user } = useAuth();
   const [filters, setFilters] = useState<JournalFiltersState>(defaultFilters);
   const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<any | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
-  const { data: entries = [], isLoading, refetch } = useQuery({
-    queryKey: ["journal-entries", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("trade_journal_entries")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+  const { data: entries = [], isLoading, refetch } = useJournalEntries();
+  const stats = useJournalStats(entries);
 
   // Filter entries
   const filtered = useMemo(() => {
     return entries.filter((e) => {
       if (filters.pair && e.pair !== filters.pair) return false;
       if (filters.setupType && e.setup_type !== filters.setupType) return false;
-      if (filters.result === "win" && !((e.result_pips ?? 0) > 0)) return false;
-      if (filters.result === "loss" && !((e.result_pips ?? 0) < 0)) return false;
+      if (filters.result === "win" && !((Number(e.result_pips) ?? 0) > 0)) return false;
+      if (filters.result === "loss" && !((Number(e.result_pips) ?? 0) < 0)) return false;
       if (filters.dateFrom && new Date(e.opened_at) < new Date(filters.dateFrom)) return false;
       if (filters.dateTo && new Date(e.opened_at) > new Date(filters.dateTo + "T23:59:59")) return false;
       return true;
     });
   }, [entries, filters]);
-
-  // Stats from closed entries (unfiltered for overall performance)
-  const closedEntries = entries.filter((e) => e.status === "closed" && e.result_pips != null);
-  const totalTrades = closedEntries.length;
-  const wins = closedEntries.filter((e) => (e.result_pips ?? 0) > 0).length;
-  const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
-  const avgPips = totalTrades > 0 ? (closedEntries.reduce((a, e) => a + (e.result_pips ?? 0), 0) / totalTrades).toFixed(1) : "0";
-
-  // Avg R-Multiple: result_pips / |entry_price - stop_loss| (in pips proxy)
-  const rEntries = closedEntries.filter((e) => e.stop_loss != null && e.result_pips != null);
-  const avgR = rEntries.length > 0
-    ? (rEntries.reduce((a, e) => {
-        const slDist = Math.abs(e.entry_price - (e.stop_loss ?? e.entry_price));
-        return a + (slDist > 0 ? (e.result_pips ?? 0) / (slDist * 10000) : 0);
-      }, 0) / rEntries.length).toFixed(2)
-    : "—";
-
-  // Best / Worst pair
-  const pairStats = closedEntries.reduce<Record<string, { total: number; count: number }>>((acc, e) => {
-    if (!acc[e.pair]) acc[e.pair] = { total: 0, count: 0 };
-    acc[e.pair].total += e.result_pips ?? 0;
-    acc[e.pair].count += 1;
-    return acc;
-  }, {});
-  const pairAvgs = Object.entries(pairStats).map(([pair, s]) => ({ pair, avg: s.total / s.count }));
-  pairAvgs.sort((a, b) => b.avg - a.avg);
-  const bestPair = pairAvgs[0]?.pair ?? "—";
-  const worstPair = pairAvgs[pairAvgs.length - 1]?.pair ?? "—";
 
   const handleRowClick = (entry: any) => {
     setSelectedEntry(entry);
@@ -95,12 +54,12 @@ export default function Journal() {
 
       {/* 6 stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Total Trades" value={String(totalTrades)} icon={BookOpen} iconColor="text-primary" />
-        <StatCard label="Win Rate" value={`${winRate}%`} icon={Trophy} iconColor="text-bullish" trend={{ value: `${wins}W / ${totalTrades - wins}L`, positive: winRate >= 50 }} />
-        <StatCard label="Avg R-Multiple" value={avgR} icon={BarChart3} iconColor="text-primary" />
-        <StatCard label="Avg Pips" value={avgPips} icon={Target} iconColor="text-warning" />
-        <StatCard label="Best Pair" value={bestPair} icon={TrendingUp} iconColor="text-bullish" />
-        <StatCard label="Worst Pair" value={worstPair} icon={TrendingDown} iconColor="text-bearish" />
+        <StatCard label="Total Trades" value={String(stats.totalTrades)} icon={BookOpen} iconColor="text-primary" />
+        <StatCard label="Win Rate" value={`${stats.winRate}%`} icon={Trophy} iconColor="text-bullish" trend={{ value: `${stats.wins}W / ${stats.totalTrades - stats.wins}L`, positive: stats.winRate >= 50 }} />
+        <StatCard label="Avg R-Multiple" value={stats.avgR} icon={BarChart3} iconColor="text-primary" />
+        <StatCard label="Avg Pips" value={stats.avgPips} icon={Target} iconColor="text-warning" />
+        <StatCard label="Best Pair" value={stats.bestPair} icon={TrendingUp} iconColor="text-bullish" />
+        <StatCard label="Worst Pair" value={stats.worstPair} icon={TrendingDown} iconColor="text-bearish" />
       </div>
 
       {/* Filters */}
@@ -148,17 +107,17 @@ export default function Journal() {
                     <TableCell className="text-xs text-muted-foreground capitalize">{entry.setup_type?.replace("_", " ") ?? "—"}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{entry.entry_price}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{entry.exit_price ?? "—"}</TableCell>
-                    <TableCell className={`text-right font-mono text-sm font-semibold ${(entry.result_pips ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
-                      {entry.result_pips != null ? `${entry.result_pips >= 0 ? "+" : ""}${entry.result_pips}` : "—"}
+                    <TableCell className={`text-right font-mono text-sm font-semibold ${(Number(entry.result_pips) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                      {entry.result_pips != null ? `${Number(entry.result_pips) >= 0 ? "+" : ""}${entry.result_pips}` : "—"}
                     </TableCell>
-                    <TableCell className={`text-right font-mono text-sm ${(entry.result_amount ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                    <TableCell className={`text-right font-mono text-sm ${(Number(entry.result_amount) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
                       {entry.result_amount != null ? `$${entry.result_amount}` : "—"}
                     </TableCell>
                     <TableCell className="text-center">
                       {entry.confidence ? (
                         <div className="flex items-center justify-center gap-0.5">
                           {Array.from({ length: 5 }).map((_, i) => (
-                            <Star key={i} className={`h-3 w-3 ${i < entry.confidence ? "text-warning fill-warning" : "text-muted-foreground/20"}`} />
+                            <Star key={i} className={`h-3 w-3 ${i < entry.confidence! ? "text-warning fill-warning" : "text-muted-foreground/20"}`} />
                           ))}
                         </div>
                       ) : "—"}

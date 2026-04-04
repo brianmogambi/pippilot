@@ -3,10 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import StatusBadge from "@/components/ui/status-badge";
 import { ArrowUpRight, ArrowDownRight, Pencil, Trash2, ImageIcon, CheckCircle2, XCircle, Star } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { useState } from "react";
+import { useDeleteJournalEntry } from "@/hooks/use-journal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,25 +24,16 @@ interface Props {
 }
 
 export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit }: Props) {
-  const queryClient = useQueryClient();
-  const [deleting, setDeleting] = useState(false);
+  const deleteMutation = useDeleteJournalEntry();
 
   if (!entry) return null;
 
   const pnl = entry.result_pips;
-  const isWin = (pnl ?? 0) > 0;
+  const isWin = (Number(pnl) ?? 0) > 0;
 
   const handleDelete = async () => {
-    setDeleting(true);
-    const { error } = await supabase.from("trade_journal_entries").delete().eq("id", entry.id);
-    setDeleting(false);
-    if (error) {
-      toast.error("Failed to delete entry");
-    } else {
-      toast.success("Entry deleted");
-      onOpenChange(false);
-      queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
-    }
+    await deleteMutation.mutateAsync(entry.id);
+    onOpenChange(false);
   };
 
   const Section = ({ title, content }: { title: string; content: string | null }) => {
@@ -98,13 +86,13 @@ export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit 
               <div>
                 <span className="text-xs text-muted-foreground">Result (pips)</span>
                 <p className={`text-xl font-bold font-mono ${isWin ? "text-bullish" : "text-bearish"}`}>
-                  {pnl != null ? `${pnl >= 0 ? "+" : ""}${pnl}` : "—"}
+                  {pnl != null ? `${Number(pnl) >= 0 ? "+" : ""}${pnl}` : "—"}
                 </p>
               </div>
               <div className="text-right">
                 <span className="text-xs text-muted-foreground">Result ($)</span>
-                <p className={`text-xl font-bold font-mono ${(entry.result_amount ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
-                  {entry.result_amount != null ? `${entry.result_amount >= 0 ? "+" : ""}$${Math.abs(entry.result_amount).toFixed(2)}` : "—"}
+                <p className={`text-xl font-bold font-mono ${(Number(entry.result_amount) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                  {entry.result_amount != null ? `${Number(entry.result_amount) >= 0 ? "+" : ""}$${Math.abs(Number(entry.result_amount)).toFixed(2)}` : "—"}
                 </p>
               </div>
             </div>
@@ -151,7 +139,7 @@ export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit 
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" className="gap-1" disabled={deleting}>
+                <Button variant="destructive" className="gap-1" disabled={deleteMutation.isPending}>
                   <Trash2 className="h-3.5 w-3.5" /> Delete
                 </Button>
               </AlertDialogTrigger>

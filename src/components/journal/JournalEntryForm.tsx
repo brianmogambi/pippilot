@@ -7,10 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Star } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useCreateJournalEntry, useUpdateJournalEntry } from "@/hooks/use-journal";
 
 const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "NZD/USD", "EUR/GBP", "GBP/JPY", "EUR/JPY", "AUD/JPY"];
 const SETUP_TYPES = ["breakout", "pullback", "reversal", "range", "trend_continuation"];
@@ -29,15 +26,16 @@ interface Props {
 }
 
 export default function JournalEntryForm({ onSuccess, entry, open: controlledOpen, onOpenChange }: Props) {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [internalOpen, setInternalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(emptyForm);
+
+  const createMutation = useCreateJournalEntry();
+  const updateMutation = useUpdateJournalEntry();
 
   const isEdit = !!entry;
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
+  const loading = createMutation.isPending || updateMutation.isPending;
 
   useEffect(() => {
     if (entry && open) {
@@ -67,8 +65,6 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    setLoading(true);
 
     const payload: any = {
       pair: form.pair,
@@ -90,25 +86,16 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
       emotional_notes: form.emotional_notes || null,
     };
 
-    let error;
     if (isEdit) {
-      ({ error } = await supabase.from("trade_journal_entries").update(payload).eq("id", entry.id));
+      await updateMutation.mutateAsync({ id: entry.id, payload });
     } else {
-      payload.user_id = user.id;
       payload.closed_at = form.status === "closed" ? new Date().toISOString() : null;
-      ({ error } = await supabase.from("trade_journal_entries").insert(payload));
+      await createMutation.mutateAsync(payload);
     }
 
-    setLoading(false);
-    if (error) {
-      toast.error(`Failed to ${isEdit ? "update" : "add"} entry`);
-    } else {
-      toast.success(`Journal entry ${isEdit ? "updated" : "added"}`);
-      setOpen(false);
-      setForm(emptyForm);
-      queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
-      onSuccess();
-    }
+    setOpen(false);
+    setForm(emptyForm);
+    onSuccess();
   };
 
   const trigger = !isEdit ? (

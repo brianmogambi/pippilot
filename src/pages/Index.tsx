@@ -1,9 +1,12 @@
 import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, DollarSign, AlertTriangle, BookOpen, Activity, Lightbulb, Eye, BarChart3, Clock, Circle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockMarketSummary } from "@/data/mockSignals";
+import { useTradingAccount, useRiskProfile } from "@/hooks/use-account";
+import { useActiveSignals } from "@/hooks/use-signals";
+import { useDashboardAlerts } from "@/hooks/use-alerts";
+import { useDashboardJournal, useDashboardJournalStats } from "@/hooks/use-journal";
+import { useDashboardWatchlist } from "@/hooks/use-watchlist";
+import { useMarketSummary } from "@/hooks/use-market-data";
 import StatCard from "@/components/ui/stat-card";
 import StatusBadge from "@/components/ui/status-badge";
 import { formatDistanceToNow } from "date-fns";
@@ -27,91 +30,27 @@ const SectionHeader = ({ title, linkTo, linkText = "View all →" }: { title: st
 
 const Dashboard = () => {
   const { user } = useAuth();
-
-  const { data: account } = useQuery({
-    queryKey: ["trading-account", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("trading_accounts").select("*").eq("is_default", true).maybeSingle();
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: riskProfile } = useQuery({
-    queryKey: ["risk-profile", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_risk_profiles").select("*").maybeSingle();
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: signals = [] } = useQuery({
-    queryKey: ["signals-active"],
-    queryFn: async () => {
-      const { data } = await supabase.from("signals").select("*").eq("status", "active").order("created_at", { ascending: false }).limit(6);
-      return data ?? [];
-    },
-    enabled: !!user,
-  });
-
-  const { data: alerts = [] } = useQuery({
-    queryKey: ["dashboard-alerts", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("alerts").select("*").order("created_at", { ascending: false }).limit(5);
-      return data ?? [];
-    },
-    enabled: !!user,
-  });
-
-  const { data: journalEntries = [] } = useQuery({
-    queryKey: ["dashboard-journal", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("trade_journal_entries").select("*").order("created_at", { ascending: false }).limit(3);
-      return data ?? [];
-    },
-    enabled: !!user,
-  });
-
-  const { data: journalStats } = useQuery({
-    queryKey: ["journal-stats", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("trade_journal_entries").select("result_pips, status");
-      if (!data || data.length === 0) return null;
-      const closed = data.filter((e) => e.status === "closed");
-      const wins = closed.filter((e) => (e.result_pips ?? 0) > 0).length;
-      const totalPips = closed.reduce((sum, e) => sum + (e.result_pips ?? 0), 0);
-      return {
-        total: data.length,
-        winRate: closed.length > 0 ? Math.round((wins / closed.length) * 100) : 0,
-        avgPL: closed.length > 0 ? Math.round(totalPips / closed.length) : 0,
-      };
-    },
-    enabled: !!user,
-  });
-
-  const { data: watchlist = [] } = useQuery({
-    queryKey: ["dashboard-watchlist", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_watchlist").select("pair").limit(6);
-      return data ?? [];
-    },
-    enabled: !!user,
-  });
+  const { data: account } = useTradingAccount();
+  const { data: riskProfile } = useRiskProfile();
+  const { data: signals = [] } = useActiveSignals(6);
+  const { data: alerts = [] } = useDashboardAlerts(5);
+  const { data: journalEntries = [] } = useDashboardJournal(3);
+  const { data: journalStats } = useDashboardJournalStats();
+  const { data: watchlist = [] } = useDashboardWatchlist(6);
+  const marketSummary = useMarketSummary();
 
   const balance = Number(account?.balance ?? 10000);
   const equity = Number(account?.equity ?? 10000);
   const dailyPnL = equity - balance;
   const maxDailyRisk = riskProfile?.max_daily_loss_pct ?? 5;
-  const riskUsed = 0; // placeholder
-  const riskRemaining = maxDailyRisk - riskUsed;
+  const riskUsed = 0;
+  const riskRemaining = Number(maxDailyRisk) - riskUsed;
   const todayTip = beginnerTips[new Date().getDate() % beginnerTips.length];
 
-  // Build market data lookup
-  const marketLookup = Object.fromEntries(mockMarketSummary.map((m) => [m.pair, m]));
+  const marketLookup = Object.fromEntries(marketSummary.map((m) => [m.pair, m]));
   const watchPairs = watchlist.length > 0
     ? watchlist.map((w) => ({ pair: w.pair, ...(marketLookup[w.pair] ?? {}) }))
-    : mockMarketSummary.slice(0, 5).map((m) => ({ pair: m.pair, ...m }));
+    : marketSummary.slice(0, 5).map((m) => ({ pair: m.pair, ...m }));
 
   const signalPairs = new Set(signals.map((s) => s.pair));
 
@@ -326,8 +265,8 @@ const Dashboard = () => {
                     <span className="text-sm font-medium text-foreground">{entry.pair}</span>
                     <StatusBadge variant={entry.direction === "long" ? "bullish" : "bearish"}>{entry.direction}</StatusBadge>
                   </div>
-                  <span className={`text-sm font-mono font-semibold ${(entry.result_pips ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
-                    {entry.result_pips != null ? `${entry.result_pips >= 0 ? "+" : ""}${entry.result_pips}p` : "open"}
+                  <span className={`text-sm font-mono font-semibold ${(Number(entry.result_pips) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                    {entry.result_pips != null ? `${Number(entry.result_pips) >= 0 ? "+" : ""}${entry.result_pips}p` : "open"}
                   </span>
                 </div>
               )) : (

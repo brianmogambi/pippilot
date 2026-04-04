@@ -1,17 +1,15 @@
 import { useState, useMemo } from "react";
 import { Star, Plus, Search, AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowRight } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useWatchlist, useInstruments, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/use-watchlist";
+import { useActiveSignals } from "@/hooks/use-signals";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/ui/status-badge";
-import { toast } from "sonner";
-import { getMarketData, type TrendDirection, type VolatilityLevel, type SessionName } from "@/data/mockMarketData";
+import { getMarketData, type TrendDirection } from "@/data/mockMarketData";
 
 const TrendIcon = ({ dir }: { dir: TrendDirection }) => {
   if (dir === "bullish") return <TrendingUp className="h-3 w-3 text-bullish" />;
@@ -20,8 +18,6 @@ const TrendIcon = ({ dir }: { dir: TrendDirection }) => {
 };
 
 export default function Watchlist() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
@@ -32,35 +28,11 @@ export default function Watchlist() {
   const [filterTrend, setFilterTrend] = useState("all");
   const [filterVol, setFilterVol] = useState("all");
 
-  const { data: instruments = [], isLoading: loadingInstruments } = useQuery({
-    queryKey: ["instruments"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("instruments").select("symbol").eq("is_active", true).order("symbol");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: watchlist = [] } = useQuery({
-    queryKey: ["watchlist", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_watchlist").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: activeSignals = [] } = useQuery({
-    queryKey: ["signals-active"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("signals").select("pair, id, direction, confidence").eq("status", "active");
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
+  const { data: instruments = [], isLoading: loadingInstruments } = useInstruments();
+  const { data: watchlist = [] } = useWatchlist();
+  const { data: activeSignals = [] } = useActiveSignals(100);
+  const addMutation = useAddToWatchlist();
+  const removeMutation = useRemoveFromWatchlist();
 
   const favSet = useMemo(() => new Set(watchlist.map((w) => w.pair)), [watchlist]);
   const signalMap = useMemo(() => {
@@ -68,23 +40,6 @@ export default function Watchlist() {
     activeSignals.forEach((s) => { if (!m[s.pair]) m[s.pair] = s; });
     return m;
   }, [activeSignals]);
-
-  const addMutation = useMutation({
-    mutationFn: async (pair: string) => {
-      const { error } = await supabase.from("user_watchlist").insert({ user_id: user!.id, pair });
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["watchlist"] }); setNewPair(""); toast.success("Added to watchlist"); },
-    onError: () => toast.error("Failed to add"),
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: async (pair: string) => {
-      const { error } = await supabase.from("user_watchlist").delete().eq("user_id", user!.id).eq("pair", pair);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["watchlist"] }); toast.success("Removed from watchlist"); },
-  });
 
   const toggleFav = (symbol: string) => {
     if (favSet.has(symbol)) removeMutation.mutate(symbol);
@@ -126,7 +81,7 @@ export default function Watchlist() {
               {availableForAdd.map((i) => <SelectItem key={i.symbol} value={i.symbol}>{i.symbol}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button size="sm" className="gap-1" disabled={!newPair || addMutation.isPending} onClick={() => addMutation.mutate(newPair)}>
+          <Button size="sm" className="gap-1" disabled={!newPair || addMutation.isPending} onClick={() => { addMutation.mutate(newPair); setNewPair(""); }}>
             <Plus className="h-3.5 w-3.5" /> Add
           </Button>
         </div>
