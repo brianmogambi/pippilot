@@ -7,7 +7,9 @@ import {
   Bell,
   BookOpen,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
+import { useIsAdmin } from "@/hooks/use-admin";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Home" },
