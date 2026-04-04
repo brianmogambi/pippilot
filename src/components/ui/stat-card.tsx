@@ -21,16 +21,19 @@ interface StatCardProps {
 
 export default function StatCard({ label, value, icon: Icon, trend, iconColor = "text-primary", variant = "default" }: StatCardProps) {
   return (
-    <div className={cn("rounded-lg border p-4 space-y-2", variantStyles[variant])}>
+    <div className={cn(
+      "rounded-lg border p-4 space-y-2 min-h-[88px] transition-all duration-200 hover:translate-y-[-1px] hover:shadow-md hover:shadow-black/10",
+      variantStyles[variant]
+    )}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">{label}</span>
         <Icon className={`h-4 w-4 ${iconColor}`} />
       </div>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
+      <p className="text-xl md:text-2xl font-bold text-foreground truncate">{value}</p>
       {trend && (
         <div className={`flex items-center gap-1 text-xs ${trend.positive ? "text-bullish" : "text-bearish"}`}>
           {trend.positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-          {trend.value}
+          <span className="truncate">{trend.value}</span>
         </div>
       )}
     </div>
