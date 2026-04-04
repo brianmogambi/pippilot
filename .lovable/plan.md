@@ -1,75 +1,123 @@
 
 
-# Phase 14 — Admin / Internal Review Panel
+# Phase 15 — Final MVP Polish
 
-## Overview
+## What this covers
 
-Add a role-gated `/admin` page with two tabs: **Signal Review** and **Alert Review**. Only users with the `admin` role (via existing `user_roles` table + `has_role()` function) can access it. The page is hidden from normal navigation — admins access it directly via URL or a subtle sidebar link visible only to them.
+A comprehensive visual and UX polish pass across all pages and shared components. No new features — only consistency, quality, and production readiness improvements.
 
-## Database changes
+---
 
-**Migration**: Add review columns to `signals` and `alerts` tables:
+## 1. Global CSS & Theme Refinements (`src/index.css`)
 
-```sql
--- signals: admin review fields
-ALTER TABLE public.signals
-  ADD COLUMN review_tag text,          -- 'good_signal', 'false_positive', 'needs_review', null
-  ADD COLUMN review_notes text,
-  ADD COLUMN reviewed_at timestamptz,
-  ADD COLUMN reviewed_by uuid;
+- Remove the unused `src/App.css` file entirely (leftover Vite scaffold — `#root` max-width/padding/text-align conflicts with our full-width layout)
+- Add smooth scrolling, better selection colors, and consistent focus ring styles
+- Add a subtle custom scrollbar for the dark theme
+- Standardize font-weight scale in base layer
 
--- alerts: admin review fields  
-ALTER TABLE public.alerts
-  ADD COLUMN review_tag text,
-  ADD COLUMN review_notes text,
-  ADD COLUMN reviewed_at timestamptz,
-  ADD COLUMN reviewed_by uuid;
-```
+## 2. Shared Components Polish
 
-No new RLS policies needed — existing admin `ALL` policy on `signals` covers updates; alerts already allow authenticated updates on own rows, but we need an admin policy for alerts too:
+### `StatCard` — add subtle hover lift, consistent min-height so cards align in grids, cap value font size on mobile
 
-```sql
-CREATE POLICY "Admins can manage alerts"
-  ON public.alerts FOR ALL TO authenticated
-  USING (has_role(auth.uid(), 'admin'));
-```
+### `StatusBadge` — currently 9 variants scattered across components; no changes needed (already clean)
 
-## New files
+### `AppHeader` — link the bell icon to `/alerts`; link the avatar to `/settings`; add a subtle separator between balance/equity
 
-### `src/hooks/use-admin.ts`
-- `useIsAdmin()` — queries `user_roles` to check if current user has admin role, returns `{ isAdmin, isLoading }`
-- `useReviewSignal()` — mutation to update `review_tag`, `review_notes`, `reviewed_at`, `reviewed_by` on a signal
-- `useReviewAlert()` — same for alerts
-- `useSignalReviewStats()` — summary: total signals, reviewed count, good/false-positive breakdown by pair
+### `AppSidebar` — add a version/build tag at bottom (`v1.0 MVP`); soften the disclaimer card styling; add subtle divider above the bottom section
 
-### `src/pages/AdminReview.tsx`
-Two-tab layout (Signals | Alerts) with:
+### `MobileNav` — currently 7-8 items in a scrollable row which is too many for small screens; group Calculator into a "More" overflow or remove from mobile nav (accessible via sidebar); ensure touch targets are at least 44px
 
-**Signal Review Tab:**
-- Filterable table: pair, status, setup_type, confidence range, review_tag (unreviewed/good/false_positive)
-- Columns: Pair, Direction, Timeframe, Setup, Confidence, Status, R:R, Review Tag, Actions
-- Inline actions: tag as Good Signal / False Positive / Needs Review, add notes via popover
-- Summary stats row at top: Total signals, Reviewed %, Good signal rate, Avg confidence (good vs false positive)
+### `AppLayout` — no changes needed
 
-**Alert Review Tab:**
-- Filterable table: pair, type, severity, review_tag
-- Columns: Title, Pair, Type, Severity, Status, Created, Review Tag, Actions
-- Same tagging + notes pattern
+## 3. Page-by-Page Polish
 
-### `src/components/admin/ReviewTagSelect.tsx`
-Reusable dropdown for tagging: Good Signal, False Positive, Needs Review, Clear
+### Dashboard (`Index.tsx`)
+- Standardize page padding to match all other pages (already consistent at `p-4 md:p-6 lg:p-8`)
+- Improve the "Trading Tip" card — make it dismissable for the session, refine gradient
+- Move the disclaimer from its own card to a subtle footer text (less visual weight)
+- Add a subtle page-level loading skeleton when data is loading
 
-### `src/components/admin/ReviewNotesPopover.tsx`
-Popover with textarea + save button for adding review notes
+### Signals (`Signals.tsx`)
+- Add result count label ("Showing 12 signals")
+- Improve empty state with illustration-style icon and CTA
+- Table header: add sticky header on scroll, subtle `bg-muted/50` background
+- Mobile cards: add a subtle divider or gap refinement
 
-## Files to modify
+### Watchlist (`Watchlist.tsx`)
+- Consistent table header styling with Signals page (`bg-muted/30`)
+- Improve "Add pair" flow — move to a more prominent position or add empty-state CTA
+- Sticky table header
 
-- `src/App.tsx` — add `/admin` route, wrapped in ProtectedRoute + admin check
-- `src/components/layout/AppSidebar.tsx` — conditionally show "Admin" link when `useIsAdmin()` returns true
-- `src/components/layout/MobileNav.tsx` — same conditional admin link
-- `src/types/trading.ts` — add `review_tag`, `review_notes`, `reviewed_at`, `reviewed_by` to Signal and Alert types (these will auto-update from DB types, but we reference them in the admin hooks)
+### Alerts (`Alerts.tsx`)
+- Remove the direct `supabase` import (should go through hooks — missed in Phase 13)
+- Notification preferences section: simplify — it duplicates Settings, just link to Settings instead
+- Improve the empty state icon
 
-## Access control
+### Journal (`Journal.tsx`)
+- Stat cards: 6 across on large screens works, but on tablet (3 cols) the "Best/Worst Pair" values may truncate — add `truncate` class
+- Empty state: add a more encouraging message with a CTA button to add first entry
+- Table: add sticky header
 
-The admin page uses `useIsAdmin()` — if not admin, redirects to `/`. The sidebar link only renders for admins. No admin-specific data leaks to regular users since signals already have a public SELECT policy and the review fields are simply additional columns (harmless to expose as null values).
+### Calculator (`CalculatorPage.tsx`)
+- Already well-structured; minor: ensure education cards have consistent padding with the calculator card
+
+### Settings (`SettingsPage.tsx`)
+- Replace raw `<select>` elements with shadcn `Select` component for consistency (Trading Style, Currency, Timezone all use `<select>`)
+- Sticky save button at bottom of viewport on mobile
+- Add unsaved-changes indicator
+
+### PairDetail (`PairDetail.tsx`)
+- Already comprehensive; minor spacing consistency on mobile
+- Chart placeholder: refine to look more intentional (add a border-dashed style)
+
+### AdminReview (`AdminReview.tsx`)
+- Add page padding (currently missing `p-4 md:p-6 lg:p-8`)
+- Improve empty/loading states to match rest of app
+
+### Auth pages (Login, Signup, ForgotPassword, ResetPassword)
+- Use `Activity` icon (the PipPilot logo icon) instead of `TrendingUp` for brand consistency
+- Add a subtle background pattern or gradient to break the flat background
+
+### NotFound
+- Update to use dark theme properly (`bg-background` not `bg-muted`), add PipPilot branding, make the link a proper Button
+
+### Onboarding
+- Already good; ensure step transitions feel smooth
+
+## 4. Consistency Fixes
+
+- **Disclaimer placement**: Currently duplicated in sidebar, dashboard, signals detail drawer, journal, watchlist, and calculator. Consolidate — keep sidebar disclaimer, remove page-level duplicates (or make them identical one-liners)
+- **Page header pattern**: All pages use `h1 text-2xl font-bold` + `p text-sm text-muted-foreground mt-1`. AdminReview is missing padding. Standardize.
+- **Filter bar pattern**: Signals uses `h-8` selects, Watchlist uses `h-9`, Journal uses `h-8`. Standardize to `h-8` everywhere.
+- **Table headers**: Signals uses `bg-muted/30`, Watchlist uses `hover:bg-transparent`, Journal has no bg. Standardize to `bg-muted/30`.
+- **Loading skeletons**: Standardize skeleton count and height across pages (currently varies 3-5 items, h-10 to h-20)
+- **Empty state pattern**: Create a reusable `EmptyState` component (icon, title, description, optional CTA) used across all pages
+
+## 5. Files Summary
+
+### New files
+- `src/components/ui/empty-state.tsx` — reusable empty state component
+
+### Files to modify (polish only)
+- `src/index.css` — scrollbar, selection, focus styles
+- `src/components/ui/stat-card.tsx` — hover effect, mobile sizing
+- `src/components/layout/AppHeader.tsx` — link bell/avatar, separator
+- `src/components/layout/AppSidebar.tsx` — version tag, divider, softer disclaimer
+- `src/components/layout/MobileNav.tsx` — reduce items, improve touch targets
+- `src/pages/Index.tsx` — disclaimer simplification, loading state, tip card refinement
+- `src/pages/Signals.tsx` — result count, table header, empty state
+- `src/pages/Alerts.tsx` — remove supabase import, simplify notification prefs, use EmptyState
+- `src/pages/Watchlist.tsx` — table header consistency, empty state
+- `src/pages/Journal.tsx` — truncation, empty state CTA, table header
+- `src/pages/SettingsPage.tsx` — replace raw selects, sticky save on mobile
+- `src/pages/AdminReview.tsx` — add page padding, improve empty/loading states
+- `src/pages/PairDetail.tsx` — chart placeholder styling
+- `src/pages/Login.tsx` — icon swap, background treatment
+- `src/pages/Signup.tsx` — same auth polish
+- `src/pages/ForgotPassword.tsx` — same auth polish
+- `src/pages/ResetPassword.tsx` — same auth polish
+- `src/pages/NotFound.tsx` — dark theme, branding, proper button
+
+### Files to delete
+- `src/App.css` — unused Vite scaffold
 
