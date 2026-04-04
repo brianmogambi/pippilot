@@ -22,6 +22,10 @@ export type Database = {
           is_read: boolean
           message: string | null
           pair: string
+          review_notes: string | null
+          review_tag: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           severity: string
           signal_id: string
           status: string
@@ -38,6 +42,10 @@ export type Database = {
           is_read?: boolean
           message?: string | null
           pair: string
+          review_notes?: string | null
+          review_tag?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           severity?: string
           signal_id: string
           status?: string
@@ -54,6 +62,10 @@ export type Database = {
           is_read?: boolean
           message?: string | null
           pair?: string
+          review_notes?: string | null
+          review_tag?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           severity?: string
           signal_id?: string
           status?: string
@@ -189,6 +201,10 @@ export type Database = {
           id: string
           invalidation_reason: string | null
           pair: string
+          review_notes: string | null
+          review_tag: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           setup_type: string | null
           status: string
           stop_loss: number
@@ -209,6 +225,10 @@ export type Database = {
           id?: string
           invalidation_reason?: string | null
           pair: string
+          review_notes?: string | null
+          review_tag?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           setup_type?: string | null
           status?: string
           stop_loss: number
@@ -229,6 +249,10 @@ export type Database = {
           id?: string
           invalidation_reason?: string | null
           pair?: string
+          review_notes?: string | null
+          review_tag?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           setup_type?: string | null
           status?: string
           stop_loss?: number
