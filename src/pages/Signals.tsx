@@ -1,78 +1,30 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { mockPairAnalysis, type PairAnalysis } from "@/data/mockMarketData";
+import { useSignals, getQualityForSignal } from "@/hooks/use-signals";
+import type { EnrichedSignal } from "@/types/trading";
 import SignalCard from "@/components/signals/SignalCard";
 import SignalDetailDrawer from "@/components/signals/SignalDetailDrawer";
 import StatusBadge from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowUpRight,
-  ArrowDownRight,
-  Ban,
-  AlertTriangle,
-  Search,
-  SlidersHorizontal,
+  ArrowUpRight, ArrowDownRight, Ban, AlertTriangle, Search, SlidersHorizontal,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-type DbSignal = {
-  id: string;
-  pair: string;
-  timeframe: string;
-  direction: string;
-  setup_type: string | null;
-  entry_price: number;
-  stop_loss: number;
-  take_profit_1: number;
-  take_profit_2: number | null;
-  take_profit_3: number | null;
-  confidence: number;
-  verdict: string;
-  status: string;
-  ai_reasoning: string;
-  invalidation_reason: string | null;
-  created_at: string;
-};
-
-export type EnrichedSignal = DbSignal & {
-  analysis: PairAnalysis | null;
-  riskReward: number;
-};
+// Re-export for components that import from here
+export type { EnrichedSignal } from "@/types/trading";
 
 const timeframes = ["All", "5m", "15m", "1H", "4H", "D"];
 const directions = ["All", "Long", "Short"];
 const qualities = ["All", "A+", "A", "B", "C"];
 const confidenceRanges = ["All", "80%+", "60-79%", "Below 60%"];
 const statuses = ["All", "active", "monitoring", "ready", "triggered", "invalidated", "closed"];
-
-function computeRR(entry: number, sl: number, tp1: number): number {
-  const risk = Math.abs(entry - sl);
-  if (risk === 0) return 0;
-  const reward = Math.abs(tp1 - entry);
-  return Math.round((reward / risk) * 100) / 100;
-}
-
-function getQualityForSignal(signal: DbSignal): string | null {
-  const analysis = mockPairAnalysis[signal.pair];
-  return analysis?.setupQuality ?? null;
-}
 
 export default function Signals() {
   const [pairSearch, setPairSearch] = useState("");
@@ -84,26 +36,7 @@ export default function Signals() {
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const { data: signals, isLoading } = useQuery({
-    queryKey: ["signals"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("signals")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as DbSignal[];
-    },
-  });
-
-  const enriched: EnrichedSignal[] = useMemo(() => {
-    if (!signals) return [];
-    return signals.map((s) => ({
-      ...s,
-      analysis: mockPairAnalysis[s.pair] ?? null,
-      riskReward: computeRR(s.entry_price, s.stop_loss, s.take_profit_1),
-    }));
-  }, [signals]);
+  const { enriched, isLoading } = useSignals();
 
   const filtered = useMemo(() => {
     return enriched.filter((s) => {
@@ -111,7 +44,7 @@ export default function Signals() {
       if (tfFilter !== "All" && s.timeframe !== tfFilter) return false;
       if (dirFilter !== "All" && s.direction !== dirFilter.toLowerCase()) return false;
       if (qualityFilter !== "All") {
-        const q = getQualityForSignal(s);
+        const q = getQualityForSignal(s.pair);
         if (q !== qualityFilter) return false;
       }
       if (confFilter === "80%+" && s.confidence < 80) return false;
@@ -193,7 +126,7 @@ export default function Signals() {
               {filtered.map((s) => {
                 const isLong = s.direction === "long";
                 const isNoTrade = s.verdict === "no_trade";
-                const quality = getQualityForSignal(s);
+                const quality = getQualityForSignal(s.pair);
                 return (
                   <TableRow
                     key={s.id}
@@ -295,15 +228,9 @@ export default function Signals() {
 }
 
 function FilterSelect({
-  label,
-  value,
-  onValueChange,
-  options,
+  label, value, onValueChange, options,
 }: {
-  label: string;
-  value: string;
-  onValueChange: (v: string) => void;
-  options: string[];
+  label: string; value: string; onValueChange: (v: string) => void; options: string[];
 }) {
   return (
     <Select value={value} onValueChange={onValueChange}>

@@ -1,8 +1,8 @@
 import { useLocation } from "react-router-dom";
 import { Bell, Wallet } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTradingAccount } from "@/hooks/use-account";
+import { useUnreadAlertCount } from "@/hooks/use-alerts";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -19,23 +19,8 @@ export default function AppHeader() {
   const { user, profile } = useAuth();
   const title = routeTitles[pathname] || "PipPilot AI";
 
-  const { data: account } = useQuery({
-    queryKey: ["trading-account", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase.from("trading_accounts").select("balance, equity").eq("is_default", true).maybeSingle();
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  const { data: unreadCount = 0 } = useQuery({
-    queryKey: ["unread-alerts", user?.id],
-    queryFn: async () => {
-      const { count } = await supabase.from("alerts").select("id", { count: "exact", head: true }).eq("is_read", false);
-      return count ?? 0;
-    },
-    enabled: !!user,
-  });
+  const { data: account } = useTradingAccount();
+  const { data: unreadCount = 0 } = useUnreadAlertCount();
 
   const initials = (profile?.display_name ?? user?.email ?? "P").charAt(0).toUpperCase();
 
