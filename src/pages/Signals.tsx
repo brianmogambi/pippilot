@@ -5,6 +5,7 @@ import SignalCard from "@/components/signals/SignalCard";
 import SignalDetailDrawer from "@/components/signals/SignalDetailDrawer";
 import StatusBadge from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import EmptyState from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -13,11 +14,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowUpRight, ArrowDownRight, Ban, AlertTriangle, Search, SlidersHorizontal,
+  ArrowUpRight, ArrowDownRight, Ban, AlertTriangle, Search, SlidersHorizontal, TrendingUp,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-// Re-export for components that import from here
 export type { EnrichedSignal } from "@/types/trading";
 
 const timeframes = ["All", "5m", "15m", "1H", "4H", "D"];
@@ -61,7 +61,7 @@ export default function Signals() {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -90,7 +90,11 @@ export default function Signals() {
         <FilterSelect label="Quality" value={qualityFilter} onValueChange={setQualityFilter} options={qualities} />
         <FilterSelect label="Confidence" value={confFilter} onValueChange={setConfFilter} options={confidenceRanges} />
         <FilterSelect label="Status" value={statusFilter} onValueChange={setStatusFilter} options={statuses} />
-        <SlidersHorizontal className="h-4 w-4 text-muted-foreground hidden md:block" />
+        {!isLoading && (
+          <span className="text-xs text-muted-foreground ml-auto hidden md:block">
+            Showing {filtered.length} of {enriched.length} signals
+          </span>
+        )}
       </div>
 
       {/* Loading */}
@@ -106,7 +110,7 @@ export default function Signals() {
       {!isLoading && (
         <div className="hidden md:block rounded-lg border border-border overflow-hidden">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10">
               <TableRow className="bg-muted/30">
                 <TableHead className="text-xs">Pair</TableHead>
                 <TableHead className="text-xs">Direction</TableHead>
@@ -194,9 +198,11 @@ export default function Signals() {
             </TableBody>
           </Table>
           {filtered.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground text-sm">
-              {enriched.length === 0 ? "No signals available yet." : "No signals match your filters."}
-            </div>
+            <EmptyState
+              icon={TrendingUp}
+              title={enriched.length === 0 ? "No signals yet" : "No matching signals"}
+              description={enriched.length === 0 ? "AI-generated signals will appear here as market conditions are analyzed." : "Try adjusting your filters to see more signals."}
+            />
           )}
         </div>
       )}
@@ -210,9 +216,11 @@ export default function Signals() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-12">
-              {enriched.length === 0 ? "No signals available yet." : "No signals match your filters."}
-            </p>
+            <EmptyState
+              icon={TrendingUp}
+              title={enriched.length === 0 ? "No signals yet" : "No matching signals"}
+              description={enriched.length === 0 ? "AI-generated signals will appear here as market conditions are analyzed." : "Try adjusting your filters to see more signals."}
+            />
           )}
         </div>
       )}
