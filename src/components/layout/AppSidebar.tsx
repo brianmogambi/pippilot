@@ -9,8 +9,10 @@ import {
   Settings,
   Activity,
   LogOut,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsAdmin } from "@/hooks/use-admin";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -25,6 +27,7 @@ const navItems = [
 export default function AppSidebar() {
   const { pathname } = useLocation();
   const { signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
   return (
     <aside className="hidden md:flex flex-col w-64 border-r border-border bg-sidebar min-h-screen p-4 gap-2">
       <Link to="/" className="flex items-center gap-2 px-3 py-4 mb-4">
@@ -55,6 +58,19 @@ export default function AppSidebar() {
       </nav>
 
       <div className="mt-auto space-y-2">
+        {isAdmin && (
+          <Link
+            to="/admin"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin")
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
+            }`}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Admin Review
+          </Link>
+        )}
         <button
           onClick={signOut}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors w-full"
