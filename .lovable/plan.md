@@ -1,87 +1,75 @@
 
 
-# Phase 13 — Backend Integration Points
+# Phase 14 — Admin / Internal Review Panel
 
-## Problem
+## Overview
 
-Data-fetching logic is scattered across page components with inline `useQuery` calls and direct Supabase imports. Mock data types are duplicated (e.g., `Signal` in `mockSignals.ts` vs `DbSignal` in `Signals.tsx` vs auto-generated types in `types.ts`). This makes it hard to swap mock data for real APIs later.
+Add a role-gated `/admin` page with two tabs: **Signal Review** and **Alert Review**. Only users with the `admin` role (via existing `user_roles` table + `has_role()` function) can access it. The page is hidden from normal navigation — admins access it directly via URL or a subtle sidebar link visible only to them.
 
-## Approach
+## Database changes
 
-Create a clean service layer: **shared types** → **data hooks** → **pages consume hooks**. Pages will import hooks instead of calling Supabase directly. Mock data files remain but are only consumed through the hooks, making them trivial to replace.
+**Migration**: Add review columns to `signals` and `alerts` tables:
 
-## Files to create
+```sql
+-- signals: admin review fields
+ALTER TABLE public.signals
+  ADD COLUMN review_tag text,          -- 'good_signal', 'false_positive', 'needs_review', null
+  ADD COLUMN review_notes text,
+  ADD COLUMN reviewed_at timestamptz,
+  ADD COLUMN reviewed_by uuid;
 
-### 1. `src/types/trading.ts` — Canonical domain types
-
-Single source of truth for all domain interfaces. Derives from Supabase auto-generated types where possible, adds computed/enriched fields separately.
-
-```text
-- Signal (from DB Row + computed riskReward)
-- Alert (from DB Row)  
-- JournalEntry (from DB Row)
-- TradingAccount (from DB Row)
-- UserRiskProfile (from DB Row)
-- Instrument (from DB Row)
-- InstrumentSnapshot (market data — currently mock-only)
-- PairAnalysis (setup analysis — currently mock-only)
-- MarketSummary (dashboard market cards)
+-- alerts: admin review fields  
+ALTER TABLE public.alerts
+  ADD COLUMN review_tag text,
+  ADD COLUMN review_notes text,
+  ADD COLUMN reviewed_at timestamptz,
+  ADD COLUMN reviewed_by uuid;
 ```
 
-### 2. `src/hooks/use-signals.ts`
-- `useSignals(filters?)` — replaces inline query in Signals.tsx
-- `useActiveSignals(limit?)` — replaces inline query in Index.tsx
-- Enrichment logic (riskReward calc, pair analysis merge) stays here
+No new RLS policies needed — existing admin `ALL` policy on `signals` covers updates; alerts already allow authenticated updates on own rows, but we need an admin policy for alerts too:
 
-### 3. `src/hooks/use-alerts.ts`
-- `useAlerts(filters?)` — replaces inline query in Alerts.tsx
-- `useMarkAlertRead()` — mutation
-- `useMarkAllAlertsRead()` — mutation
-- `useUnreadAlertCount()` — replaces inline query in AppHeader.tsx
+```sql
+CREATE POLICY "Admins can manage alerts"
+  ON public.alerts FOR ALL TO authenticated
+  USING (has_role(auth.uid(), 'admin'));
+```
 
-### 4. `src/hooks/use-journal.ts`
-- `useJournalEntries()` — replaces inline query in Journal.tsx
-- `useCreateJournalEntry()` — mutation (from JournalEntryForm)
-- `useUpdateJournalEntry()` — mutation
-- `useDeleteJournalEntry()` — mutation
-- `useJournalStats()` — derived computed stats (win rate, avg R, best/worst pair)
+## New files
 
-### 5. `src/hooks/use-account.ts`
-- `useTradingAccount()` — replaces inline queries in Index.tsx, AppHeader.tsx
-- `useRiskProfile()` — replaces inline query in Index.tsx, SettingsPage.tsx
+### `src/hooks/use-admin.ts`
+- `useIsAdmin()` — queries `user_roles` to check if current user has admin role, returns `{ isAdmin, isLoading }`
+- `useReviewSignal()` — mutation to update `review_tag`, `review_notes`, `reviewed_at`, `reviewed_by` on a signal
+- `useReviewAlert()` — same for alerts
+- `useSignalReviewStats()` — summary: total signals, reviewed count, good/false-positive breakdown by pair
 
-### 6. `src/hooks/use-watchlist.ts`
-- `useWatchlist()` — replaces inline query in Watchlist.tsx
-- `useAddToWatchlist()` — mutation
-- `useRemoveFromWatchlist()` — mutation
-- `useInstruments()` — replaces inline query in Watchlist.tsx
+### `src/pages/AdminReview.tsx`
+Two-tab layout (Signals | Alerts) with:
 
-### 7. `src/hooks/use-market-data.ts`
-- `useMarketData(symbol)` — wraps `getMarketData()` with a hook interface
-- `usePairAnalysis(symbol)` — wraps `getPairAnalysis()`
-- `useMarketSummary()` — wraps `mockMarketSummary`
-- These are the primary swap points: when a real market data API is integrated, only these hooks change
+**Signal Review Tab:**
+- Filterable table: pair, status, setup_type, confidence range, review_tag (unreviewed/good/false_positive)
+- Columns: Pair, Direction, Timeframe, Setup, Confidence, Status, R:R, Review Tag, Actions
+- Inline actions: tag as Good Signal / False Positive / Needs Review, add notes via popover
+- Summary stats row at top: Total signals, Reviewed %, Good signal rate, Avg confidence (good vs false positive)
+
+**Alert Review Tab:**
+- Filterable table: pair, type, severity, review_tag
+- Columns: Title, Pair, Type, Severity, Status, Created, Review Tag, Actions
+- Same tagging + notes pattern
+
+### `src/components/admin/ReviewTagSelect.tsx`
+Reusable dropdown for tagging: Good Signal, False Positive, Needs Review, Clear
+
+### `src/components/admin/ReviewNotesPopover.tsx`
+Popover with textarea + save button for adding review notes
 
 ## Files to modify
 
-- `src/pages/Index.tsx` — replace 4 inline queries with hook calls
-- `src/pages/Signals.tsx` — replace query + enrichment with `useSignals()`; remove local `DbSignal`/`EnrichedSignal` types
-- `src/pages/Alerts.tsx` — replace query + mutations with hook calls; remove local `Alert` type
-- `src/pages/Journal.tsx` — replace query with `useJournalEntries()` + `useJournalStats()`
-- `src/pages/Watchlist.tsx` — replace queries/mutations with hook calls
-- `src/pages/PairDetail.tsx` — use `useMarketData()` / `usePairAnalysis()`
-- `src/components/layout/AppHeader.tsx` — use `useTradingAccount()` + `useUnreadAlertCount()`
-- `src/components/journal/JournalEntryForm.tsx` — use mutation hooks
-- `src/components/journal/JournalDetailDrawer.tsx` — use mutation hooks
+- `src/App.tsx` — add `/admin` route, wrapped in ProtectedRoute + admin check
+- `src/components/layout/AppSidebar.tsx` — conditionally show "Admin" link when `useIsAdmin()` returns true
+- `src/components/layout/MobileNav.tsx` — same conditional admin link
+- `src/types/trading.ts` — add `review_tag`, `review_notes`, `reviewed_at`, `reviewed_by` to Signal and Alert types (these will auto-update from DB types, but we reference them in the admin hooks)
 
-## What stays the same
+## Access control
 
-- All UI components, layouts, and styling remain untouched
-- Mock data files (`mockMarketData.ts`, `mockSignals.ts`) remain as data sources consumed by hooks
-- Supabase client import stays in hooks only (not in pages)
-- `react-query` cache keys and invalidation patterns preserved
-
-## Result
-
-After this refactor, connecting a real backend (e.g., Claude-built signal engine) means editing only the hook files — pages and components never need to change.
+The admin page uses `useIsAdmin()` — if not admin, redirects to `/`. The sidebar link only renders for admins. No admin-specific data leaks to regular users since signals already have a public SELECT policy and the review fields are simply additional columns (harmless to expose as null values).
 
