@@ -328,7 +328,7 @@ export default function PairDetail() {
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground text-center">⚠️ Prices are indicative only. Not financial advice. Trading carries risk.</p>
+      <p className="text-[10px] text-muted-foreground/60 text-center">⚠️ Prices are indicative only. Not financial advice.</p>
     </div>
   );
 }
