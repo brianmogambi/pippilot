@@ -14,6 +14,7 @@ const navItems = [
   { to: "/calculator", icon: Calculator, label: "Calculator" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/journal", icon: BookOpen, label: "Journal" },
+  { to: "/learn", icon: GraduationCap, label: "Learn" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

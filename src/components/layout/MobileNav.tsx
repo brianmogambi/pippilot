@@ -9,7 +9,7 @@ const navItems = [
   { to: "/signals", icon: TrendingUp, label: "Signals" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/journal", icon: BookOpen, label: "Journal" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/learn", icon: GraduationCap, label: "Learn" },
 ];
 
 export default function MobileNav() {
