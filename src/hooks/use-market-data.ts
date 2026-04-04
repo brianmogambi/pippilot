@@ -1,4 +1,5 @@
-import { getMarketData, getPairAnalysis, mockMarketSummary } from "@/data/mockMarketData";
+import { getMarketData, getPairAnalysis } from "@/data/mockMarketData";
+import { mockMarketSummary } from "@/data/mockSignals";
 import type { MarketData, PairAnalysis, MarketSummary } from "@/types/trading";
 
 // These hooks wrap mock data functions. When a real market data API is
