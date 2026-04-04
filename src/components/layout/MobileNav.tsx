@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Eye, TrendingUp, Bell, BookOpen, Settings,
+  LayoutDashboard, Eye, TrendingUp, Bell, BookOpen, GraduationCap,
 } from "lucide-react";
 
 const navItems = [
