@@ -124,10 +124,8 @@ export function useCreateJournalEntry() {
 
   return useMutation({
     mutationFn: async (payload: Record<string, any>) => {
-      const { error } = await supabase.from("trade_journal_entries").insert({
-        ...payload,
-        user_id: user!.id,
-      });
+      const row = { ...payload, user_id: user!.id } as any;
+      const { error } = await supabase.from("trade_journal_entries").insert(row);
       if (error) throw error;
     },
     onSuccess: () => {
