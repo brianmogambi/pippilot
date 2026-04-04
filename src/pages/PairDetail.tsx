@@ -111,10 +111,10 @@ export default function PairDetail() {
                 ))}
               </ToggleGroup>
             </div>
-            <div className="aspect-video flex flex-col items-center justify-center bg-muted/20">
-              <BarChart3 className="h-12 w-12 text-muted-foreground/30 mb-2" />
-              <p className="text-sm font-medium text-muted-foreground">TradingView integration coming soon</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Price action & indicator overlays</p>
+            <div className="aspect-video flex flex-col items-center justify-center bg-muted/10 border-2 border-dashed border-border/50 rounded-b-lg">
+              <BarChart3 className="h-12 w-12 text-muted-foreground/20 mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">Chart coming soon</p>
+              <p className="text-[11px] text-muted-foreground/60 mt-0.5">TradingView integration with indicator overlays</p>
             </div>
           </div>
 
