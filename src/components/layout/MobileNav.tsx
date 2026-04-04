@@ -23,10 +23,13 @@ const navItems = [
 
 export default function MobileNav() {
   const { pathname } = useLocation();
+  const { isAdmin } = useIsAdmin();
+
+  const allItems = isAdmin ? [...navItems, { to: "/admin", icon: ShieldCheck, label: "Admin" }] : navItems;
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-t border-border flex justify-around py-2 overflow-x-auto">
-      {navItems.map((item) => {
+      {allItems.map((item) => {
         const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
         return (
           <Link
