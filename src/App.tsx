@@ -20,6 +20,7 @@ import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
+import AdminReview from "./pages/AdminReview";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
