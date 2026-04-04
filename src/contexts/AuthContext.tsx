@@ -19,6 +19,9 @@ interface Profile {
   timezone: string | null;
   notifications_enabled: boolean | null;
   onboarding_completed: boolean | null;
+  default_timeframe: string | null;
+  preferred_strategies: string[];
+  alert_channels: string[];
 }
 
 interface AuthContextType {
