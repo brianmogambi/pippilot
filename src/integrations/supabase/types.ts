@@ -529,6 +529,86 @@ export type Database = {
         }
         Relationships: []
       }
+      pair_analyses: {
+        Row: {
+          id: string
+          signal_id: string | null
+          pair: string
+          setup_type: string
+          direction: string
+          entry_zone_low: number
+          entry_zone_high: number
+          stop_loss: number
+          tp1: number
+          tp2: number | null
+          tp3: number | null
+          confidence: number
+          setup_quality: string
+          invalidation: string
+          beginner_explanation: string
+          expert_explanation: string
+          reasons_for: string[]
+          reasons_against: string[]
+          no_trade_reason: string | null
+          verdict: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          signal_id?: string | null
+          pair: string
+          setup_type: string
+          direction: string
+          entry_zone_low: number
+          entry_zone_high: number
+          stop_loss: number
+          tp1: number
+          tp2?: number | null
+          tp3?: number | null
+          confidence: number
+          setup_quality: string
+          invalidation: string
+          beginner_explanation?: string
+          expert_explanation?: string
+          reasons_for?: string[]
+          reasons_against?: string[]
+          no_trade_reason?: string | null
+          verdict: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          signal_id?: string | null
+          pair?: string
+          setup_type?: string
+          direction?: string
+          entry_zone_low?: number
+          entry_zone_high?: number
+          stop_loss?: number
+          tp1?: number
+          tp2?: number | null
+          tp3?: number | null
+          confidence?: number
+          setup_quality?: string
+          invalidation?: string
+          beginner_explanation?: string
+          expert_explanation?: string
+          reasons_for?: string[]
+          reasons_against?: string[]
+          no_trade_reason?: string | null
+          verdict?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pair_analyses_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

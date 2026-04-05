@@ -12,6 +12,7 @@ export function useTradingAccount() {
       const { data } = await supabase
         .from("trading_accounts")
         .select("*")
+        .eq("user_id", user!.id)
         .eq("is_default", true)
         .maybeSingle();
       return data as TradingAccount | null;
@@ -29,6 +30,7 @@ export function useRiskProfile() {
       const { data } = await supabase
         .from("user_risk_profiles")
         .select("*")
+        .eq("user_id", user!.id)
         .maybeSingle();
       return data as UserRiskProfile | null;
     },

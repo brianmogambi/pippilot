@@ -12,6 +12,7 @@ export function useWatchlist() {
       const { data, error } = await supabase
         .from("user_watchlist")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -26,7 +27,7 @@ export function useDashboardWatchlist(limit = 6) {
   return useQuery({
     queryKey: ["dashboard-watchlist", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("user_watchlist").select("pair").limit(limit);
+      const { data } = await supabase.from("user_watchlist").select("pair").eq("user_id", user!.id).limit(limit);
       return data ?? [];
     },
     enabled: !!user,

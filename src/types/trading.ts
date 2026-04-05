@@ -64,6 +64,7 @@ export type JournalEntry = Tables<"trade_journal_entries">;
 export type TradingAccount = Tables<"trading_accounts">;
 export type UserRiskProfile = Tables<"user_risk_profiles">;
 export type Instrument = Tables<"instruments">;
+export type PairAnalysisRow = Tables<"pair_analyses">;
 
 // ── Enriched types (computed fields on top of DB rows) ──────────
 export type EnrichedSignal = Signal & {

@@ -13,6 +13,7 @@ export function useAlerts() {
       const { data, error } = await supabase
         .from("alerts")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Alert[];
@@ -30,6 +31,7 @@ export function useDashboardAlerts(limit = 5) {
       const { data } = await supabase
         .from("alerts")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
         .limit(limit);
       return (data ?? []) as Alert[];
@@ -47,6 +49,7 @@ export function useUnreadAlertCount() {
       const { count } = await supabase
         .from("alerts")
         .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
         .eq("is_read", false);
       return count ?? 0;
     },

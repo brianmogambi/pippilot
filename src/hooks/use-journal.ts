@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMemo } from "react";
 import type { JournalEntry, JournalStats } from "@/types/trading";
+import { pipMultiplier } from "@/lib/pip-value";
 import { toast } from "sonner";
 
 export function useJournalEntries() {
@@ -14,6 +15,7 @@ export function useJournalEntries() {
       const { data, error } = await supabase
         .from("trade_journal_entries")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as JournalEntry[];
@@ -31,6 +33,7 @@ export function useDashboardJournal(limit = 3) {
       const { data } = await supabase
         .from("trade_journal_entries")
         .select("*")
+        .eq("user_id", user!.id)
         .order("created_at", { ascending: false })
         .limit(limit);
       return (data ?? []) as JournalEntry[];
@@ -43,11 +46,12 @@ export function useJournalByPair(pair: string, limit = 5) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["journal-pair", pair],
+    queryKey: ["journal-pair", user?.id, pair],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("trade_journal_entries")
         .select("*")
+        .eq("user_id", user!.id)
         .eq("pair", pair)
         .order("opened_at", { ascending: false })
         .limit(limit);
@@ -64,7 +68,7 @@ export function useDashboardJournalStats() {
   return useQuery({
     queryKey: ["journal-stats", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("trade_journal_entries").select("result_pips, status");
+      const { data } = await supabase.from("trade_journal_entries").select("result_pips, status").eq("user_id", user!.id);
       if (!data || data.length === 0) return null;
       const closed = data.filter((e) => e.status === "closed");
       const wins = closed.filter((e) => (Number(e.result_pips) ?? 0) > 0).length;
@@ -93,7 +97,7 @@ export function useJournalStats(entries: JournalEntry[]): JournalStats {
     const avgR = rEntries.length > 0
       ? (rEntries.reduce((a, e) => {
           const slDist = Math.abs(Number(e.entry_price) - Number(e.stop_loss ?? e.entry_price));
-          return a + (slDist > 0 ? (Number(e.result_pips) ?? 0) / (slDist * 10000) : 0);
+          return a + (slDist > 0 ? (Number(e.result_pips) ?? 0) / (slDist * pipMultiplier(e.pair)) : 0);
         }, 0) / rEntries.length).toFixed(2)
       : "—";
 

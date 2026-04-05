@@ -1,13 +1,38 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, ArrowDownRight, Ban, Info } from "lucide-react";
-import { mockSignals } from "@/data/mockSignals";
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Ban, Info, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Signal } from "@/types/trading";
 import RiskCalculator from "@/components/calculator/RiskCalculator";
 
 export default function SignalDetail() {
   const { id } = useParams();
-  const signal = mockSignals.find((s) => s.id === id);
+  const { user } = useAuth();
 
-  if (!signal) {
+  const { data: signal, isLoading, error } = useQuery({
+    queryKey: ["signal", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("signals")
+        .select("*")
+        .eq("id", id!)
+        .single();
+      if (error) throw error;
+      return data as Signal;
+    },
+    enabled: !!user && !!id,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-8 flex justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!signal || error) {
     return (
       <div className="p-8 text-center">
         <p className="text-muted-foreground">Signal not found.</p>

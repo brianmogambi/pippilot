@@ -54,8 +54,8 @@ const Dashboard = () => {
 
   const marketLookup = Object.fromEntries(marketSummary.map((m) => [m.pair, m]));
   const watchPairs = watchlist.length > 0
-    ? watchlist.map((w) => ({ pair: w.pair, ...(marketLookup[w.pair] ?? {}) }))
-    : marketSummary.slice(0, 5).map((m) => ({ pair: m.pair, ...m }));
+    ? watchlist.map((w) => ({ ...(marketLookup[w.pair] ?? {}), pair: w.pair }))
+    : marketSummary.slice(0, 5).map((m) => ({ ...m }));
 
   const signalPairs = new Set(signals.map((s) => s.pair));
 

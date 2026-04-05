@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getMarketData as getMockMarketData, getPairAnalysis as getMockPairAnalysis } from "@/data/mockMarketData";
+import type { PairAnalysisRow } from "@/types/trading";
 import { mockMarketSummary } from "@/data/mockSignals";
 import type { MarketData, PairAnalysis, MarketSummary, VolatilityLevel, TrendDirection, SessionName, MarketStructure } from "@/types/trading";
 
@@ -86,10 +87,50 @@ export function useMarketData(symbol: string): MarketData {
 
 /**
  * Get PairAnalysis for a symbol.
- * Currently still returns mock data — will be replaced in Step 3
- * when the signal generation engine produces real analyses.
+ * Queries pair_analyses table for real data, falls back to mock.
  */
 export function usePairAnalysis(symbol: string): PairAnalysis | null {
+  const { user } = useAuth();
+
+  const { data } = useQuery({
+    queryKey: ["pair-analysis", symbol],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pair_analyses")
+        .select("*")
+        .eq("pair", symbol)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as PairAnalysisRow | null;
+    },
+    enabled: !!user && !!symbol,
+    staleTime: 60_000,
+  });
+
+  if (data) {
+    return {
+      setupType: data.setup_type,
+      direction: data.direction as "long" | "short",
+      entryZone: [data.entry_zone_low, data.entry_zone_high],
+      stopLoss: data.stop_loss,
+      tp1: data.tp1,
+      tp2: data.tp2 ?? 0,
+      tp3: data.tp3 ?? 0,
+      confidence: data.confidence,
+      setupQuality: data.setup_quality as PairAnalysis["setupQuality"],
+      invalidation: data.invalidation,
+      beginnerExplanation: data.beginner_explanation,
+      expertExplanation: data.expert_explanation,
+      reasonsFor: data.reasons_for,
+      reasonsAgainst: data.reasons_against,
+      noTradeReason: data.no_trade_reason,
+      verdict: data.verdict as "trade" | "no_trade",
+    };
+  }
+
+  // Fallback to mock while pair_analyses table is empty
   return getMockPairAnalysis(symbol);
 }
 

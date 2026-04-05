@@ -7,21 +7,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Calculator, ShieldAlert, AlertTriangle, Shield } from "lucide-react";
-import { mockMarketData } from "@/data/mockMarketData";
+import { INSTRUMENT_PAIRS, isJpyPair, pipMultiplier } from "@/lib/pip-value";
+import { usePipValue } from "@/hooks/use-pip-value";
 
-// ── Pure calculation helpers (structured for future extraction) ──
+// ── Pure calculation helpers ──
 
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF"] as const;
 
-const PAIRS = Object.keys(mockMarketData);
-
-function isJpyPair(pair: string) {
-  return pair.includes("JPY");
-}
-
-function pipMultiplier(pair: string) {
-  return isJpyPair(pair) ? 100 : 10000;
-}
+const PAIRS = [...INSTRUMENT_PAIRS];
 
 function calculateRiskAmount(balance: number, riskPct: number, fixedAmount?: number) {
   if (fixedAmount && fixedAmount > 0) return fixedAmount;
@@ -39,11 +32,6 @@ function calculateLotSize(riskAmount: number, pipDistance: number, pipVal: numbe
 
 function calculateExposure(lotSize: number) {
   return lotSize * 100_000;
-}
-
-function pipValueForPair(_pair: string) {
-  // Placeholder — $10 per pip per standard lot for USD-quoted pairs
-  return 10;
 }
 
 // ── Validation ──
@@ -118,7 +106,7 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
   const errors = useMemo(() => validate(balance, entry, sl, riskPct), [balance, entry, sl, riskPct]);
   const hasErrors = Object.keys(errors).length > 0;
 
-  const pipVal = pipValueForPair(pair);
+  const { pipValue: pipVal, isLive: isPipValueLive } = usePipValue(pair);
   const riskAmount = calculateRiskAmount(balance, riskPct, fixedRisk === "" ? undefined : fixedRisk);
   const pipDistance = entry && sl ? calculatePipDistance(entry, sl, pair) : 0;
   let lotSize = calculateLotSize(riskAmount, pipDistance, pipVal);
@@ -279,7 +267,7 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
             sub={canCalc ? `${(lotSize * 10).toFixed(1)} mini · ${(lotSize * 100).toFixed(0)} micro` : undefined}
             highlight
           />
-          <ResultCell label="Pip Value" value={`$${pipVal.toFixed(2)}/pip`} />
+          <ResultCell label="Pip Value" value={`$${pipVal.toFixed(2)}/pip`} sub={isPipValueLive ? "live" : "est."} />
           <ResultCell
             label="Exposure"
             value={canCalc ? `${currency} ${exposure.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}

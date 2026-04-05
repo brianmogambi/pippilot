@@ -38,12 +38,12 @@ export default function CalculatorPage() {
             <ol className="list-decimal list-inside space-y-1.5 text-xs text-muted-foreground leading-relaxed">
               <li><strong>Risk Amount</strong> = Account Balance × Risk %</li>
               <li><strong>SL Distance</strong> = |Entry Price − Stop Loss| converted to pips</li>
-              <li><strong>Pip Value</strong> ≈ $10 per pip per standard lot (USD-quoted)</li>
+              <li><strong>Pip Value</strong> — calculated from live exchange rates per pair</li>
               <li><strong>Lot Size</strong> = Risk Amount ÷ (SL Distance × Pip Value)</li>
               <li><strong>Exposure</strong> = Lot Size × 100,000 units</li>
             </ol>
             <p className="text-[10px] text-muted-foreground/70 mt-2">
-              * Pip value is approximate. Exact value depends on quote currency and broker.
+              * Pip values use live exchange rates when available, with static estimates as fallback.
             </p>
           </EducationCard>
 

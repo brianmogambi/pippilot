@@ -56,7 +56,7 @@ export default function Watchlist() {
     let list = instruments.map((i) => {
       const md = liveMarketData?.[i.symbol] ?? getMockMarketData(i.symbol);
       const sig = signalMap[i.symbol];
-      return { symbol: i.symbol, isFav: favSet.has(i.symbol), ...md, signal: sig ?? null };
+      return { ...md, symbol: i.symbol, isFav: favSet.has(i.symbol), signal: sig ?? null };
     });
 
     if (search) list = list.filter((r) => r.symbol.toLowerCase().includes(search.toLowerCase()));
