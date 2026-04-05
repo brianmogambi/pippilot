@@ -101,7 +101,7 @@
 | Performance Predictions | Estimate probability of hitting TP based on historical similar setups | P2 |
 
 ### Technical Requirements
-- LLM integration via Lovable AI (supported models: Gemini, GPT)
+- LLM integration via Anthropic Claude (extending the Step 4 AI explanation layer)
 - Historical data aggregation and analysis pipeline
 - User behavior tracking (which signals they view, follow, or ignore)
 - A/B testing framework for scoring weight changes

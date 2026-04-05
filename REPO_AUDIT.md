@@ -12,7 +12,7 @@ PipPilot AI is an AI-assisted forex analysis platform — a decision-support too
 
 - **Phase**: MVP (V1) — complete
 - **Architecture**: Single-page application (no SSR) with Supabase backend
-- **Deployment**: Lovable Cloud (managed Supabase hosting)
+- **Deployment**: Supabase (self-hosted project with Edge Functions)
 
 ---
 

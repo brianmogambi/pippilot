@@ -8,6 +8,7 @@ import { useDashboardAlerts } from "@/hooks/use-alerts";
 import { useDashboardJournal, useDashboardJournalStats } from "@/hooks/use-journal";
 import { useDashboardWatchlist } from "@/hooks/use-watchlist";
 import { useMarketSummary } from "@/hooks/use-market-data";
+import { useDailyRiskUsed } from "@/hooks/use-daily-risk";
 import StatCard from "@/components/ui/stat-card";
 import StatusBadge from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,8 +49,9 @@ const Dashboard = () => {
   const equity = Number(account?.equity ?? 10000);
   const dailyPnL = equity - balance;
   const maxDailyRisk = riskProfile?.max_daily_loss_pct ?? 5;
-  const riskUsed = 0;
-  const riskRemaining = Number(maxDailyRisk) - riskUsed;
+  const { riskUsedPct } = useDailyRiskUsed();
+  const riskUsed = Math.round(riskUsedPct * 10) / 10;
+  const riskRemaining = Math.max(0, Number(maxDailyRisk) - riskUsed);
   const todayTip = beginnerTips[new Date().getDate() % beginnerTips.length];
 
   const marketLookup = Object.fromEntries(marketSummary.map((m) => [m.pair, m]));

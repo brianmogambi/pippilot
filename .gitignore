@@ -30,3 +30,6 @@ dist-ssr
 
 # Supabase CLI metadata
 supabase/.temp/
+
+# Claude Code local config
+.claude/

@@ -78,11 +78,12 @@ function HowItWorks() {
         <AccordionItem value="analysis" className="border border-border rounded-lg px-4">
           <AccordionTrigger className="text-sm font-semibold">The Analysis Process</AccordionTrigger>
           <AccordionContent className="text-sm text-muted-foreground space-y-3">
-            <p>1. <strong>Market structure scan</strong> — identifies trends, key levels, and price patterns across multiple timeframes.</p>
-            <p>2. <strong>Setup detection</strong> — looks for high-probability setups such as breakouts, pullbacks, and reversals.</p>
-            <p>3. <strong>Confluence scoring</strong> — checks how many factors align (trend, structure, indicators, timeframes). More confluence = higher confidence.</p>
-            <p>4. <strong>Risk evaluation</strong> — applies risk rules before suggesting a trade. If the risk-reward ratio is poor, it may recommend "No Trade."</p>
-            <p>5. <strong>Signal generation</strong> — outputs a structured trade idea with entry, stop loss, take profit levels, and a confidence score.</p>
+            <p>1. <strong>Fetch OHLCV candles</strong> — live H1, H4, and Daily candles are pulled from Twelve Data for 16 forex pairs (majors, crosses, and XAU/USD).</p>
+            <p>2. <strong>Compute technical indicators</strong> — EMA(20/50/200), RSI(14), ATR(14), MACD(12,26,9), and Bollinger Bands are calculated per timeframe.</p>
+            <p>3. <strong>Detect setup patterns</strong> — the engine scans for 5 patterns: Trend Pullback, Breakout Retest, Range Reversal, Momentum Breakout, and S/R Rejection.</p>
+            <p>4. <strong>Score confluence (0–100)</strong> — starts at 50, then adds/subtracts points based on timeframe alignment, EMA stack, RSI, MACD, key-level proximity, session timing, and counter-signals.</p>
+            <p>5. <strong>Compute levels & verdict</strong> — entry, stop loss, and three take-profit targets are derived from structure and ATR. If confidence &lt; 45, alignment is poor, or R:R &lt; 1.2, the verdict becomes "No Trade".</p>
+            <p>6. <strong>AI explanation layer</strong> — Claude Haiku generates the beginner/expert explanations and reasons for/against. The AI never modifies scores, confidence, or levels.</p>
           </AccordionContent>
         </AccordionItem>
 
@@ -108,15 +109,33 @@ function HowItWorks() {
           </AccordionContent>
         </AccordionItem>
 
+        <AccordionItem value="data-ai" className="border border-border rounded-lg px-4">
+          <AccordionTrigger className="text-sm font-semibold">Data Sources & AI Role</AccordionTrigger>
+          <AccordionContent className="text-sm text-muted-foreground space-y-3">
+            <div>
+              <p className="font-medium text-foreground">Market Data</p>
+              <p>Live forex prices and OHLCV candles come from <strong>Twelve Data</strong>. Prices refresh periodically via a scheduled Edge Function. If the feed fails, the app gracefully falls back to cached values.</p>
+            </div>
+            <div>
+              <p className="font-medium text-foreground">Deterministic Engine</p>
+              <p>All numerical outputs — confidence, entry/SL/TP levels, setup quality, trade/no-trade verdict — are computed by a rule-based engine. The same inputs always produce the same outputs. No randomness, no black box.</p>
+            </div>
+            <div>
+              <p className="font-medium text-foreground">AI Explanation Layer</p>
+              <p>After the engine decides, <strong>Claude Haiku</strong> writes the human-readable beginner and expert explanations plus the reasons for and against the trade. The AI <em>explains</em> — it cannot change scores, confidence, or levels.</p>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
         <AccordionItem value="no-trade" className="border border-border rounded-lg px-4">
           <AccordionTrigger className="text-sm font-semibold">When PipPilot says "No Trade"</AccordionTrigger>
           <AccordionContent className="text-sm text-muted-foreground">
-            <p>Not every market condition is suitable for trading. PipPilot may output a "No Trade" verdict when:</p>
+            <p>Not every market condition is suitable for trading. PipPilot outputs a "No Trade" verdict when:</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>There is no clear trend or structure</li>
-              <li>Volatility is too high or too low</li>
-              <li>The risk-reward ratio is unfavorable</li>
-              <li>Major news events create uncertainty</li>
+              <li>Confidence score is below 45</li>
+              <li>Timeframe alignment is weak (fewer than 2 of 3 timeframes agree)</li>
+              <li>Risk-reward ratio is below 1.2</li>
+              <li>Conflicting signals across H1/H4/D1</li>
             </ul>
             <p className="mt-2 font-medium text-foreground">Staying out of the market is sometimes the best trade.</p>
           </AccordionContent>
@@ -137,8 +156,9 @@ function UnderstandingSignals() {
     { name: "Take Profit 1 (TP1)", desc: "The first profit target — conservative." },
     { name: "Take Profit 2 (TP2)", desc: "A second, extended target for partial profits." },
     { name: "Take Profit 3 (TP3)", desc: "The most optimistic target — only in strong setups." },
-    { name: "Confidence Score", desc: "0–100 rating of how many factors align. Higher = stronger setup, but never a guarantee." },
-    { name: "Setup Type", desc: "The pattern or strategy identified (breakout, pullback, reversal, etc.)." },
+    { name: "Confidence Score", desc: "0–100 score from confluence factors (base 50 ± timeframe alignment, EMA stack, RSI, MACD, structure, key levels, session)." },
+    { name: "Setup Quality", desc: "A+ (≥80), A (≥65), B (≥50), C (<50) — a letter grade derived from the confidence score." },
+    { name: "Setup Type", desc: "The specific pattern detected (see Setup Patterns below)." },
     { name: "Risk-Reward Ratio", desc: "How much you stand to gain vs. how much you risk. Aim for 1:2 or better." },
   ];
 
@@ -147,6 +167,14 @@ function UnderstandingSignals() {
     { status: "Ready", color: "default" as const, desc: "Conditions met — trade idea is actionable." },
     { status: "Triggered", color: "default" as const, desc: "Entry price has been reached." },
     { status: "Invalidated", color: "destructive" as const, desc: "Conditions changed — do NOT enter." },
+  ];
+
+  const setupPatterns = [
+    { name: "Trend Pullback", desc: "H4/D1 is trending and H1 has pulled back to EMA20/50 with RSI 40–60 — entering with the trend after a shallow retrace." },
+    { name: "Breakout Retest", desc: "Price broke a key level and has returned to test it as new support/resistance before continuing." },
+    { name: "Range Reversal", desc: "Market is ranging and price has reached a range boundary with an RSI extreme — expecting mean reversion." },
+    { name: "Momentum Breakout", desc: "Strong directional candle with an ATR spike and clean EMA alignment — expecting continuation." },
+    { name: "S/R Rejection", desc: "Price tagged a support/resistance level and printed a rejection candle (long wick) — reversal at structure." },
   ];
 
   return (
@@ -158,6 +186,18 @@ function UnderstandingSignals() {
             <div key={f.name} className="flex gap-3 items-baseline rounded-lg border border-border p-3">
               <span className="text-sm font-medium text-foreground min-w-[140px]">{f.name}</span>
               <span className="text-sm text-muted-foreground">{f.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-base font-semibold text-foreground mb-3">Setup Patterns</h3>
+        <div className="grid gap-2">
+          {setupPatterns.map((p) => (
+            <div key={p.name} className="rounded-lg border border-border p-3">
+              <p className="text-sm font-medium text-foreground">{p.name}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{p.desc}</p>
             </div>
           ))}
         </div>
@@ -216,11 +256,13 @@ function RiskSection() {
           <AccordionContent className="text-sm text-muted-foreground space-y-3">
             <p>The PipPilot risk calculator gives you:</p>
             <div className="space-y-2">
-              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Lot Size</strong> — the exact position size for your risk parameters.</div></div>
+              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Lot Size</strong> — the exact position size for your risk parameters, shown as standard / mini / micro lots.</div></div>
               <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Money at Risk</strong> — the dollar amount you'd lose if stopped out.</div></div>
-              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Risk-Reward Ratio</strong> — potential gain divided by potential loss.</div></div>
-              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Warnings</strong> — alerts if your risk exceeds safe thresholds.</div></div>
+              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Pip Value</strong> — computed from <em>live</em> exchange rates when market data is available (marked "live" vs "est.").</div></div>
+              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Exposure</strong> — notional position size in account currency.</div></div>
+              <div className="flex gap-2"><ChevronRight className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" /><div><strong>Warnings</strong> — alerts if total open risk exceeds 3% (caution) or 5% (danger).</div></div>
             </div>
+            <p className="pt-2 border-t border-border mt-3"><strong>Daily Risk Tracker</strong> — the dashboard shows "Risk Used Today" as a % of your balance, summed from open journal entries logged today. It helps you respect your daily risk budget.</p>
           </AccordionContent>
         </AccordionItem>
 
@@ -303,6 +345,12 @@ const glossaryTerms = [
   { term: "Risk-Reward Ratio", def: "Potential profit divided by potential loss. A 1:3 ratio means you risk $1 to potentially make $3." },
   { term: "Drawdown", def: "The decline from a peak account balance to a trough. Measures how much you've lost before recovering." },
   { term: "Confluence", def: "When multiple analysis factors align in the same direction, increasing the probability of a setup." },
+  { term: "OHLCV", def: "Open/High/Low/Close/Volume — the four prices (and volume) of a candle over a time period. PipPilot pulls OHLCV for H1, H4, and Daily timeframes." },
+  { term: "EMA (Exponential Moving Average)", def: "A moving average that weights recent prices more heavily. PipPilot uses EMA 20/50/200 to identify trend direction and alignment." },
+  { term: "RSI (Relative Strength Index)", def: "Momentum oscillator from 0 to 100. Above 70 = overbought, below 30 = oversold. Used to confirm entries and spot extremes." },
+  { term: "ATR (Average True Range)", def: "A volatility indicator showing the average candle range over 14 periods. Used to size stop losses and detect breakouts." },
+  { term: "MACD", def: "Moving Average Convergence Divergence — a trend/momentum indicator. The histogram shows whether momentum is building for or against the trend." },
+  { term: "Bollinger Bands", def: "Price envelopes ±2 standard deviations around a 20-period moving average. Narrow bands = low volatility (ranging); wide bands = high volatility." },
 ];
 
 function GlossarySection({ search }: { search: string }) {
@@ -337,7 +385,12 @@ const faqItems = [
   { q: "Why does it sometimes say 'No Trade'?", a: "This means conditions aren't favorable. There's no clear setup, the risk-reward is poor, or volatility is too high/low. Staying out of the market is often the best decision." },
   { q: "How much should I risk per trade?", a: "Most professionals recommend risking 1–2% of your account per trade. This ensures that losing streaks don't destroy your account. Use the built-in risk calculator to determine position size." },
   { q: "Can I use this with any broker?", a: "PipPilot provides analysis independently of any broker. You can use its signals with any forex broker that supports the pairs PipPilot covers. The app does not connect to or interact with broker accounts." },
-  { q: "Is my data private?", a: "Yes. Your account data, journal entries, and settings are stored securely and are only accessible to you." },
+  { q: "Is my data private?", a: "Yes. Your account data, journal entries, and settings are stored securely in Supabase with row-level security (RLS), so only you can access your rows." },
+  { q: "Where does PipPilot's market data come from?", a: "Live prices and historical OHLCV candles come from Twelve Data, refreshed by a scheduled Edge Function. If the feed is temporarily unavailable, the app falls back to cached values so the UI never breaks." },
+  { q: "Which pairs does PipPilot cover?", a: "16 instruments: majors (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD, NZD/USD, USD/CHF), crosses (EUR/GBP, GBP/JPY, EUR/JPY, AUD/JPY, CHF/JPY, EUR/AUD, GBP/AUD, EUR/CAD), and XAU/USD (gold)." },
+  { q: "Is the AI making trade decisions?", a: "No. A deterministic rule-based engine computes all numerical outputs — confidence, entry/SL/TP, and the trade/no-trade verdict. Claude AI only writes the human-readable explanations and reasoning. AI explains; it does not decide." },
+  { q: "How often are signals generated?", a: "The signal engine can run on a schedule (every few hours) and on demand. Each run fetches fresh H1/H4/D1 candles, recomputes indicators, detects setups, and writes new signals to the database. Old active signals for the same pair are expired when a new one replaces them." },
+  { q: "Why are pip values marked 'live' or 'est.'?", a: "Pip values depend on the current exchange rate. When live market data is available, the app computes the exact pip value in USD ('live'). When not, it falls back to a static default ('est.'). The risk calculator uses whichever is available." },
 ];
 
 function FAQSection({ search }: { search: string }) {

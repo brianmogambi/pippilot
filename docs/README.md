@@ -48,7 +48,7 @@ PipPilot AI is a web-based trading companion that provides AI-generated forex ma
 │   TanStack React Query for data fetching        │
 │   React Router v6 for routing                   │
 ├─────────────────────────────────────────────────┤
-│                  Backend (Lovable Cloud)          │
+│                  Backend (Supabase)              │
 │   Supabase PostgreSQL database                   │
 │   Row-Level Security (RLS) on all tables         │
 │   Auth (email/password with verification)        │
@@ -107,10 +107,10 @@ PipPilot AI is a web-based trading companion that provides AI-generated forex ma
 | Routing | React Router v6 |
 | Data Fetching | TanStack React Query v5 |
 | Forms | React Hook Form + Zod validation |
-| Backend | Lovable Cloud (Supabase) |
+| Backend | Supabase (self-hosted project) |
 | Database | PostgreSQL with RLS |
 | Auth | Supabase Auth (email/password) |
-| Deployment | Lovable preview/publish |
+| Deployment | Vite static build + Supabase Edge Functions |
 
 ## How the System Is Intended to Evolve
 
