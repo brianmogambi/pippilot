@@ -7,10 +7,11 @@ import { useActiveSignals } from "@/hooks/use-signals";
 import { useDashboardAlerts } from "@/hooks/use-alerts";
 import { useDashboardJournal, useDashboardJournalStats } from "@/hooks/use-journal";
 import { useDashboardWatchlist } from "@/hooks/use-watchlist";
-import { useMarketSummary } from "@/hooks/use-market-data";
+import { useMarketSummary, useAllMarketData } from "@/hooks/use-market-data";
 import { useDailyRiskUsed } from "@/hooks/use-daily-risk";
 import StatCard from "@/components/ui/stat-card";
-import StatusBadge from "@/components/ui/status-badge";
+import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
+import { freshnessOf, type Freshness } from "@/lib/data-freshness";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 
@@ -41,13 +42,16 @@ const Dashboard = () => {
   const { data: journalStats } = useDashboardJournalStats();
   const { data: watchlist = [] } = useDashboardWatchlist(6);
   const marketSummary = useMarketSummary();
+  const { data: marketDataMap } = useAllMarketData();
   const [tipDismissed, setTipDismissed] = useState(false);
 
   const isLoading = loadingAccount || loadingSignals;
 
-  const balance = Number(account?.balance ?? 10000);
-  const equity = Number(account?.equity ?? 10000);
+  const hasAccount = account && Number(account.balance) > 0;
+  const balance = Number(account?.balance ?? 0);
+  const equity = Number(account?.equity ?? 0);
   const dailyPnL = equity - balance;
+  const hasRiskProfile = riskProfile?.max_daily_loss_pct != null;
   const maxDailyRisk = riskProfile?.max_daily_loss_pct ?? 5;
   const { riskUsedPct } = useDailyRiskUsed();
   const riskUsed = Math.round(riskUsedPct * 10) / 10;
@@ -55,9 +59,25 @@ const Dashboard = () => {
   const todayTip = beginnerTips[new Date().getDate() % beginnerTips.length];
 
   const marketLookup = Object.fromEntries(marketSummary.map((m) => [m.pair, m]));
-  const watchPairs = watchlist.length > 0
-    ? watchlist.map((w) => ({ ...(marketLookup[w.pair] ?? {}), pair: w.pair }))
-    : marketSummary.slice(0, 5).map((m) => ({ ...m }));
+  // Phase 9: no silent fallback. The empty-state branch below handles
+  // the no-watchlist case explicitly.
+  const watchPairs = watchlist.map((w) => ({
+    ...(marketLookup[w.pair] ?? {}),
+    pair: w.pair,
+  }));
+
+  // Worst freshness across visible watchlist rows — drives the
+  // "Market Watch" header pill.
+  const watchFreshnesses: Freshness[] = watchPairs.map((wp) =>
+    freshnessOf(marketDataMap?.[wp.pair]?.updatedAt, !!marketDataMap?.[wp.pair]),
+  );
+  const headerFreshness: Freshness | null = watchFreshnesses.length === 0
+    ? null
+    : watchFreshnesses.includes("fallback")
+    ? "fallback"
+    : watchFreshnesses.includes("cached")
+    ? "cached"
+    : "live";
 
   const signalPairs = new Set(signals.map((s) => s.pair));
 
@@ -98,38 +118,53 @@ const Dashboard = () => {
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
       {/* 1. Account Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard label="Balance" value={`$${balance.toLocaleString()}`} icon={Wallet} iconColor="text-primary" />
-        <StatCard
-          label="Equity"
-          value={`$${equity.toLocaleString()}`}
-          icon={DollarSign}
-          iconColor="text-primary"
-          trend={{ value: `${dailyPnL >= 0 ? "+" : ""}$${dailyPnL.toLocaleString()}`, positive: dailyPnL >= 0 }}
-        />
-        <StatCard
-          label="Daily P/L"
-          value={`${dailyPnL >= 0 ? "+" : ""}$${dailyPnL.toLocaleString()}`}
-          icon={BarChart3}
-          iconColor={dailyPnL >= 0 ? "text-bullish" : "text-bearish"}
-          variant={dailyPnL >= 0 ? "success" : "danger"}
-        />
-        <StatCard
-          label="Risk Used Today"
-          value={`${riskUsed}%`}
-          icon={Activity}
-          iconColor="text-bullish"
-          variant="default"
-          trend={{ value: `of ${maxDailyRisk}% max`, positive: true }}
-        />
-        <StatCard
-          label="Risk Remaining"
-          value={`${riskRemaining}%`}
-          icon={Shield}
-          iconColor={riskRemaining <= 1 ? "text-bearish" : "text-warning"}
-          variant={riskRemaining <= 1 ? "danger" : riskRemaining <= 2 ? "warning" : "default"}
-        />
-      </div>
+      {hasAccount ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <StatCard label="Balance" value={`$${balance.toLocaleString()}`} icon={Wallet} iconColor="text-primary" />
+          <StatCard
+            label="Equity"
+            value={`$${equity.toLocaleString()}`}
+            icon={DollarSign}
+            iconColor="text-primary"
+            trend={{ value: `${dailyPnL >= 0 ? "+" : ""}$${dailyPnL.toLocaleString()}`, positive: dailyPnL >= 0 }}
+          />
+          <StatCard
+            label="Daily P/L"
+            value={`${dailyPnL >= 0 ? "+" : ""}$${dailyPnL.toLocaleString()}`}
+            icon={BarChart3}
+            iconColor={dailyPnL >= 0 ? "text-bullish" : "text-bearish"}
+            variant={dailyPnL >= 0 ? "success" : "danger"}
+          />
+          <StatCard
+            label="Risk Used Today"
+            value={`${riskUsed}%`}
+            icon={Activity}
+            iconColor="text-bullish"
+            variant="default"
+            trend={{
+              value: hasRiskProfile
+                ? `of ${maxDailyRisk}% max`
+                : `of ${maxDailyRisk}% max (default)`,
+              positive: true,
+            }}
+          />
+          <StatCard
+            label="Risk Remaining"
+            value={`${riskRemaining}%`}
+            icon={Shield}
+            iconColor={riskRemaining <= 1 ? "text-bearish" : "text-warning"}
+            variant={riskRemaining <= 1 ? "danger" : riskRemaining <= 2 ? "warning" : "default"}
+          />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex items-center gap-3">
+          <Wallet className="h-5 w-5 text-primary shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-foreground">Set up your trading account</p>
+            <p className="text-xs text-muted-foreground">Go to <Link to="/settings" className="text-primary hover:underline">Settings</Link> to configure your account balance and risk parameters.</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column */}
@@ -230,10 +265,34 @@ const Dashboard = () => {
         <div className="space-y-6">
           {/* 2. Market Watch Summary */}
           <div className="space-y-3">
-            <SectionHeader title="Market Watch" linkTo="/watchlist" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-foreground">Market Watch</h2>
+                {headerFreshness && (
+                  <FreshnessBadge
+                    freshness={headerFreshness}
+                    title={
+                      headerFreshness === "live"
+                        ? "All visible pairs updated within the last 10 minutes"
+                        : headerFreshness === "cached"
+                        ? "At least one pair is older than 10 minutes"
+                        : "At least one pair has no live data yet"
+                    }
+                  />
+                )}
+              </div>
+              <Link to="/watchlist" className="text-xs text-primary hover:underline">View all →</Link>
+            </div>
             <div className="rounded-lg border border-border bg-card divide-y divide-border">
-              {watchPairs.map((wp: any) => {
+              {watchPairs.length === 0 && (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  Add pairs to your watchlist to see market data here.
+                </div>
+              )}
+              {watchPairs.map((wp) => {
                 const market = marketLookup[wp.pair];
+                const liveRow = marketDataMap?.[wp.pair];
+                const rowFreshness = freshnessOf(liveRow?.updatedAt, !!liveRow);
                 const changePct = market?.changePct;
                 const volatility = getVolatility(changePct);
                 const hasSignal = signalPairs.has(wp.pair);
@@ -241,7 +300,21 @@ const Dashboard = () => {
                   <div key={wp.pair} className="p-3 space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-foreground">{wp.pair}</span>
-                      <span className="text-sm font-mono text-muted-foreground">{market?.price ?? "—"}</span>
+                      <div className="flex items-center gap-2">
+                        {rowFreshness !== "live" && (
+                          <FreshnessBadge
+                            freshness={rowFreshness}
+                            title={
+                              rowFreshness === "fallback"
+                                ? "No live data — Edge Function hasn't returned this pair yet"
+                                : liveRow?.updatedAt
+                                ? `Updated ${formatDistanceToNow(new Date(liveRow.updatedAt), { addSuffix: true })}`
+                                : "Cached"
+                            }
+                          />
+                        )}
+                        <span className="text-sm font-mono text-muted-foreground">{market?.price ?? "—"}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {changePct !== undefined && (

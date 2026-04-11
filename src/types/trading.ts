@@ -47,6 +47,20 @@ export interface PairAnalysis {
   reasonsAgainst: string[];
   noTradeReason: string | null;
   verdict: Verdict;
+  // Phase 8: explanation metadata. All optional — legacy rows pre-date
+  // these columns. The UI does not render them this phase; a future
+  // phase can light up an "AI" / "Template" badge.
+  explanationSource?: "ai" | "template" | null;
+  explanationStatus?:
+    | "ai_success"
+    | "ai_failed"
+    | "ai_skipped"
+    | "template_only"
+    | null;
+  explanationModel?: string | null;
+  explanationPromptVersion?: string | null;
+  explanationGeneratedAt?: string | null;
+  explanationErrorCode?: string | null;
 }
 
 export interface MarketSummary {
@@ -70,6 +84,31 @@ export type PairAnalysisRow = Tables<"pair_analyses">;
 export type EnrichedSignal = Signal & {
   analysis: PairAnalysis | null;
   riskReward: number;
+};
+
+// ── Candle types ───────────────────────────────────────────────
+
+export type CandleTimeframe = "5m" | "15m" | "1h" | "4h" | "1d";
+
+export interface OHLCVCandle {
+  symbol: string;
+  timeframe: CandleTimeframe;
+  candle_time: string;      // ISO 8601 timestamptz
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number | null;
+  fetched_at: string;        // ISO 8601 timestamptz
+}
+
+/** Maps PairDetail UI toggle values to DB enum values */
+export const UI_TO_DB_TIMEFRAME: Record<string, CandleTimeframe> = {
+  "5m": "5m",
+  "15m": "15m",
+  "1H": "1h",
+  "4H": "4h",
+  "1D": "1d",
 };
 
 // ── Journal stats (derived) ─────────────────────────────────────

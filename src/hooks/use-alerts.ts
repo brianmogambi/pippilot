@@ -2,7 +2,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Alert } from "@/types/trading";
+import type { AlertEventKind } from "@/lib/alert-engine";
 import { toast } from "sonner";
+
+// Phase 7: enriched payload — joins the source signal via FK so the
+// dashboard widget can render setup type / direction inline.
+export type EnrichedAlert = Alert & {
+  event_kind: AlertEventKind | null;
+  analysis_run_id: string | null;
+  signal: {
+    setup_type: string | null;
+    direction: string | null;
+    confidence: number | null;
+    entry_price: number | string | null;
+    verdict: string | null;
+  } | null;
+};
+
+const ENRICHED_SELECT =
+  "*, signal:signals!alerts_signal_id_fkey(setup_type, direction, confidence, entry_price, verdict)";
 
 export function useAlerts() {
   const { user } = useAuth();
@@ -69,6 +87,47 @@ export function useMarkAlertRead() {
       queryClient.invalidateQueries({ queryKey: ["alerts"] });
       queryClient.invalidateQueries({ queryKey: ["unread-alerts"] });
     },
+  });
+}
+
+export function useEnrichedAlerts(opts?: { kinds?: AlertEventKind[] }) {
+  const { user } = useAuth();
+  const kinds = opts?.kinds;
+
+  return useQuery({
+    queryKey: ["enriched-alerts", user?.id, kinds?.join(",") ?? "all"],
+    queryFn: async () => {
+      let query = supabase
+        .from("alerts")
+        .select(ENRICHED_SELECT)
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+      if (kinds && kinds.length > 0) {
+        query = query.in("event_kind" as never, kinds as never);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as unknown as EnrichedAlert[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useDashboardAlertsEnriched(limit = 5) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["dashboard-alerts-enriched", user?.id, limit],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("alerts")
+        .select(ENRICHED_SELECT)
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      return (data ?? []) as unknown as EnrichedAlert[];
+    },
+    enabled: !!user,
   });
 }
 

@@ -2,6 +2,7 @@
 // No AI/LLM — all logic is rule-based and reproducible.
 
 import { ema, rsi, atr, macd, bollingerBands, lastValid, sma } from "./indicators.ts";
+import type { ExplanationResult } from "./explanation-service.ts";
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -73,6 +74,10 @@ export interface SignalOutput {
   marketStructure: "trending" | "ranging" | "breakout";
   supportLevel: number;
   resistanceLevel: number;
+  riskReward: number;
+  // Phase 8: optional metadata slot populated by the runner after the
+  // explanation service runs. The signal engine itself does not use it.
+  explanationMeta?: ExplanationResult;
 }
 
 // ── Indicator computation ──────────────────────────────────────
@@ -571,5 +576,6 @@ export function analyzeForSignal(
     marketStructure: structure,
     supportLevel: support,
     resistanceLevel: resistance,
+    riskReward: Math.round(riskReward * 100) / 100,
   };
 }

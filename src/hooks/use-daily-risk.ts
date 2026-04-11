@@ -3,8 +3,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useTradingAccount } from "@/hooks/use-account";
 import { usePipValues } from "@/hooks/use-pip-value";
-import { pipMultiplier } from "@/lib/pip-value";
+import { calculateOpenRiskUSD, type OpenPosition } from "@/lib/risk-engine";
 import type { JournalEntry } from "@/types/trading";
+import type { Freshness } from "@/lib/data-freshness";
 
 function startOfTodayISO(): string {
   const d = new Date();
@@ -12,10 +13,14 @@ function startOfTodayISO(): string {
   return d.toISOString();
 }
 
-export function useDailyRiskUsed(): { riskUsedPct: number; isLoading: boolean } {
+export function useDailyRiskUsed(): {
+  riskUsedPct: number;
+  isLoading: boolean;
+  pipFreshness: Freshness;
+} {
   const { user } = useAuth();
   const { data: account } = useTradingAccount();
-  const { getPipValue } = usePipValues();
+  const { getPipValue, freshness: pipFreshness } = usePipValues();
 
   const { data: trades, isLoading } = useQuery({
     queryKey: ["daily-risk-trades", user?.id],
@@ -34,16 +39,20 @@ export function useDailyRiskUsed(): { riskUsedPct: number; isLoading: boolean } 
   });
 
   if (!account?.balance || !trades || trades.length === 0) {
-    return { riskUsedPct: 0, isLoading };
+    return { riskUsedPct: 0, isLoading, pipFreshness };
   }
 
-  const totalRiskUsd = trades.reduce((sum, trade) => {
-    if (!trade.lot_size || !trade.stop_loss || !trade.entry_price) return sum;
-    const pipDist = Math.abs(trade.entry_price - trade.stop_loss) * pipMultiplier(trade.pair);
-    const pipVal = getPipValue(trade.pair);
-    return sum + trade.lot_size * pipDist * pipVal;
-  }, 0);
+  const positions: OpenPosition[] = trades
+    .filter((t) => t.lot_size && t.stop_loss && t.entry_price)
+    .map((t) => ({
+      pair: t.pair,
+      lotSize: Number(t.lot_size),
+      entry: Number(t.entry_price),
+      stopLoss: Number(t.stop_loss),
+      pipValueUSD: getPipValue(t.pair),
+    }));
 
+  const totalRiskUsd = calculateOpenRiskUSD(positions);
   const riskUsedPct = (totalRiskUsd / Number(account.balance)) * 100;
-  return { riskUsedPct, isLoading };
+  return { riskUsedPct, isLoading, pipFreshness };
 }

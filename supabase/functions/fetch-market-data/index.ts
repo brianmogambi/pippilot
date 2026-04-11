@@ -86,10 +86,44 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const startedAt = new Date();
+
+    // ── Create generation run record ─────────────────────────────
+    const { data: runRow, error: runInsertErr } = await supabase
+      .from("generation_runs")
+      .insert({
+        function_name: "fetch-market-data",
+        pairs_processed: SYMBOLS,
+        started_at: startedAt.toISOString(),
+        status: "running",
+      })
+      .select("id")
+      .single();
+
+    if (runInsertErr) console.error("Failed to create generation run:", runInsertErr.message);
+    const runId: string | null = runRow?.id ?? null;
+
+    async function finalizeRun(
+      status: "success" | "partial" | "failed",
+      apiCredits: number,
+      errorMsg?: string,
+    ) {
+      if (!runId) return;
+      const finished = new Date();
+      await supabase.from("generation_runs").update({
+        finished_at: finished.toISOString(),
+        duration_ms: finished.getTime() - startedAt.getTime(),
+        status,
+        api_credits_used: apiCredits,
+        error_message: errorMsg ?? null,
+      }).eq("id", runId);
+    }
+
     // Twelve Data free tier: 8 API credits/min (1 credit per symbol in batch).
     // Split into batches of 8 with a 61-second pause between batches.
     const BATCH_SIZE = 8;
     const quotes: Record<string, TwelveDataQuote> = {};
+    let totalApiCredits = 0;
 
     for (let i = 0; i < SYMBOLS.length; i += BATCH_SIZE) {
       if (i > 0) {
@@ -117,6 +151,7 @@ Deno.serve(async (req) => {
           if (data[sym] && !data[sym].code) quotes[sym] = data[sym];
         }
       }
+      totalApiCredits += batch.length;
     }
 
     const now = new Date();
@@ -168,6 +203,7 @@ Deno.serve(async (req) => {
     }
 
     if (rows.length === 0) {
+      await finalizeRun("failed", totalApiCredits, "No valid quotes received");
       return new Response(JSON.stringify({ error: "No valid quotes received" }), {
         status: 502,
         headers: { "Content-Type": "application/json" },
@@ -180,7 +216,28 @@ Deno.serve(async (req) => {
       .upsert(rows, { onConflict: "symbol" });
 
     if (error) {
+      await finalizeRun("failed", totalApiCredits, error.message);
       throw new Error(`Supabase upsert error: ${error.message}`);
+    }
+
+    const runStatus = rows.length < SYMBOLS.length ? "partial" : "success";
+    await finalizeRun(runStatus, totalApiCredits);
+
+    // Phase 7: chain evaluate-alerts as fire-and-forget. Failures here
+    // must never poison the fetch-market-data response.
+    try {
+      const evalUrl = `${supabaseUrl}/functions/v1/evaluate-alerts`;
+      // Don't await — we want this to be best-effort.
+      fetch(evalUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({ source: "fetch-market-data", runId }),
+      }).catch((e) => console.warn("evaluate-alerts chain failed:", e));
+    } catch (e) {
+      console.warn("evaluate-alerts chain dispatch failed:", e);
     }
 
     return new Response(
@@ -188,6 +245,7 @@ Deno.serve(async (req) => {
         success: true,
         updated: rows.length,
         symbols: rows.map((r) => r.symbol),
+        runId,
         timestamp: now.toISOString(),
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },

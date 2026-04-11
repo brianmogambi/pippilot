@@ -1,19 +1,24 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { ArrowLeft, Star, AlertTriangle, TrendingUp, TrendingDown, Minus, BarChart3, Ban, Bell, BellOff, Activity, Layers, Zap, CheckCircle2, XCircle, Target } from "lucide-react";
+import { ArrowLeft, Star, AlertTriangle, TrendingUp, TrendingDown, Minus, Ban, Bell, BellOff, Activity, Layers, Zap, CheckCircle2, XCircle, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import StatusBadge from "@/components/ui/status-badge";
+import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
+import { formatDistanceToNow } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { useMarketData, usePairAnalysis } from "@/hooks/use-market-data";
+import { useMarketData } from "@/hooks/use-market-data";
 import { useWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/use-watchlist";
 import { useSignalsByPair } from "@/hooks/use-signals";
 import { useJournalByPair } from "@/hooks/use-journal";
-import type { TrendDirection, MarketStructure } from "@/types/trading";
+import { useCandlesWithFetch } from "@/hooks/use-candles";
+import CandlestickChart from "@/components/chart/CandlestickChart";
+import SetupContextBar from "@/components/chart/SetupContextBar";
+import type { TrendDirection, MarketStructure, Verdict } from "@/types/trading";
+import { UI_TO_DB_TIMEFRAME } from "@/types/trading";
 
 /* ───────────── small sub-components ───────────── */
 
@@ -46,16 +51,23 @@ export default function PairDetail() {
   const { pair } = useParams<{ pair: string }>();
   const decodedPair = decodeURIComponent(pair ?? "");
   const navigate = useNavigate();
-  const md = useMarketData(decodedPair);
-  const analysis = usePairAnalysis(decodedPair);
+  const { data: md, freshness: mdFreshness, updatedAt: mdUpdatedAt } = useMarketData(decodedPair);
   const [timeframe, setTimeframe] = useState("1H");
   const [alerts, setAlerts] = useState({ entry: false, confirmation: false, tpsl: false });
-  const fmt = (v: number) => v.toFixed(md.price > 100 ? 2 : 4);
+  const fmt = (v: number) => v.toFixed(md && md.price > 100 ? 2 : 4);
 
   /* ── queries via hooks ── */
   const { data: watchlist = [] } = useWatchlist();
-  const { data: signals = [], isLoading: loadingSignals } = useSignalsByPair(decodedPair);
+  const { data: enrichedSignals = [], isLoading: loadingSignals } = useSignalsByPair(decodedPair);
   const { data: journalEntries = [] } = useJournalByPair(decodedPair);
+
+  /* ── single source of truth: the most recent active enriched signal ── */
+  const activeSignal = enrichedSignals[0] ?? null;
+  const analysis = activeSignal?.analysis ?? null;
+
+  /* ── candle data for chart ── */
+  const dbTimeframe = UI_TO_DB_TIMEFRAME[timeframe] ?? "1h";
+  const { data: candles = [], isLoading: loadingCandles, isFetching: fetchingCandles } = useCandlesWithFetch(decodedPair, dbTimeframe, 300);
 
   const isFav = watchlist.some((w) => w.pair === decodedPair);
   const addMut = useAddToWatchlist();
@@ -78,17 +90,33 @@ export default function PairDetail() {
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/watchlist")}><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-foreground truncate">{decodedPair}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-foreground truncate">{decodedPair}</h1>
+            <FreshnessBadge
+              freshness={mdFreshness}
+              title={
+                mdFreshness === "fallback"
+                  ? "No live market data — Edge Function hasn't returned this pair yet"
+                  : mdUpdatedAt
+                  ? `Updated ${formatDistanceToNow(new Date(mdUpdatedAt), { addSuffix: true })}`
+                  : "Cached"
+              }
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="font-mono font-bold text-lg text-foreground">{fmt(md.price)}</span>
-          <span className="text-muted-foreground">Spd: {md.spread.toFixed(1)}</span>
-          <span className={md.dailyChangePct > 0 ? "text-bullish" : md.dailyChangePct < 0 ? "text-bearish" : "text-muted-foreground"}>
-            {md.dailyChangePct > 0 ? "+" : ""}{md.dailyChangePct.toFixed(2)}%
-          </span>
-          <StatusBadge variant={md.activeSession === "Closed" ? "expired" : "active"} className="text-[10px]">{md.activeSession}</StatusBadge>
-          {md.newsRisk && <AlertTriangle className="h-4 w-4 text-warning" />}
-        </div>
+        {md ? (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-mono font-bold text-lg text-foreground">{fmt(md.price)}</span>
+            <span className="text-muted-foreground">Spd: {md.spread.toFixed(1)}</span>
+            <span className={md.dailyChangePct > 0 ? "text-bullish" : md.dailyChangePct < 0 ? "text-bearish" : "text-muted-foreground"}>
+              {md.dailyChangePct > 0 ? "+" : ""}{md.dailyChangePct.toFixed(2)}%
+            </span>
+            <StatusBadge variant={md.activeSession === "Closed" ? "expired" : "active"} className="text-[10px]">{md.activeSession}</StatusBadge>
+            {md.newsRisk && <AlertTriangle className="h-4 w-4 text-warning" />}
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">Market data unavailable</span>
+        )}
         <Button variant="outline" size="sm" className="gap-1.5" onClick={() => isFav ? removeMut.mutate(decodedPair) : addMut.mutate(decodedPair)}>
           <Star className={`h-3.5 w-3.5 ${isFav ? "fill-warning text-warning" : ""}`} />
           {isFav ? "Favorited" : "Favorite"}
@@ -102,7 +130,15 @@ export default function PairDetail() {
           {/* Section 2 — Chart Area */}
           <div className="rounded-lg border border-border bg-card overflow-hidden">
             <div className="flex items-center justify-between p-3 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground">Chart</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">Chart</h2>
+                {fetchingCandles && candles.length > 0 && (
+                  <FreshnessBadge
+                    freshness="cached"
+                    title="Refreshing candles in the background"
+                  />
+                )}
+              </div>
               <ToggleGroup type="single" value={timeframe} onValueChange={(v) => v && setTimeframe(v)} size="sm" className="gap-0.5">
                 {["5m", "15m", "1H", "4H", "1D"].map((tf) => (
                   <ToggleGroupItem key={tf} value={tf} className="text-xs px-2.5 h-7 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
@@ -111,28 +147,54 @@ export default function PairDetail() {
                 ))}
               </ToggleGroup>
             </div>
-            <div className="aspect-video flex flex-col items-center justify-center bg-muted/10 border-2 border-dashed border-border/50 rounded-b-lg">
-              <BarChart3 className="h-12 w-12 text-muted-foreground/20 mb-2" />
-              <p className="text-sm font-medium text-muted-foreground">Chart coming soon</p>
-              <p className="text-[11px] text-muted-foreground/60 mt-0.5">TradingView integration with indicator overlays</p>
-            </div>
+            <SetupContextBar
+              setupType={activeSignal?.setup_type ?? null}
+              direction={(activeSignal?.direction as "long" | "short" | null) ?? null}
+              confidence={activeSignal?.confidence ?? null}
+              quality={activeSignal?.analysis?.setupQuality ?? null}
+              verdict={(activeSignal?.verdict as Verdict | null) ?? null}
+              marketStructure={md?.marketStructure ?? null}
+              htfBias={md?.trendD1 ?? null}
+            />
+            <CandlestickChart
+              candles={candles}
+              analysis={analysis}
+              marketData={md}
+              signals={enrichedSignals}
+              isLoading={loadingCandles}
+              isFetching={fetchingCandles}
+              setupLabel={
+                activeSignal && activeSignal.setup_type && activeSignal.direction
+                  ? {
+                      setupType: activeSignal.setup_type,
+                      direction: activeSignal.direction as "long" | "short",
+                      confidence: activeSignal.confidence,
+                      verdict: activeSignal.verdict as Verdict,
+                    }
+                  : null
+              }
+            />
           </div>
 
           {/* Section 4 — Key Levels */}
           <div className="rounded-lg border border-border bg-card p-4">
             <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5"><Target className="h-4 w-4 text-primary" /> Key Levels</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
-              <div className="divide-y divide-border">
-                <LevelRow label="Support" value={fmt(md.supportLevel)} color="text-bullish" />
-                <LevelRow label="Resistance" value={fmt(md.resistanceLevel)} color="text-bearish" />
-                <LevelRow label="Session High" value={fmt(md.sessionHigh)} />
+            {md ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                <div className="divide-y divide-border">
+                  <LevelRow label="Support" value={fmt(md.supportLevel)} color="text-bullish" />
+                  <LevelRow label="Resistance" value={fmt(md.resistanceLevel)} color="text-bearish" />
+                  <LevelRow label="Session High" value={fmt(md.sessionHigh)} />
+                </div>
+                <div className="divide-y divide-border">
+                  <LevelRow label="Session Low" value={fmt(md.sessionLow)} />
+                  <LevelRow label="Prev Day High" value={fmt(md.prevDayHigh)} />
+                  <LevelRow label="Prev Day Low" value={fmt(md.prevDayLow)} />
+                </div>
               </div>
-              <div className="divide-y divide-border">
-                <LevelRow label="Session Low" value={fmt(md.sessionLow)} />
-                <LevelRow label="Prev Day High" value={fmt(md.prevDayHigh)} />
-                <LevelRow label="Prev Day Low" value={fmt(md.prevDayLow)} />
-              </div>
-            </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Market data not yet available. Run the market data sync to populate.</p>
+            )}
           </div>
 
           {/* Section 5 — Setup Card */}
@@ -189,22 +251,31 @@ export default function PairDetail() {
             <div className="p-4 border-b border-border"><h2 className="text-sm font-semibold text-foreground">Active Signals</h2></div>
             {loadingSignals ? (
               <div className="p-4 space-y-2">{[1, 2].map((i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
-            ) : signals.length === 0 ? (
+            ) : enrichedSignals.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">No active signals for {decodedPair}</p>
             ) : (
               <div className="divide-y divide-border">
-                {signals.map((s) => (
-                  <div key={s.id} className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => navigate(`/signals/${s.id}`)}>
-                    <div className="flex items-center gap-3">
-                      <StatusBadge variant={s.direction === "long" ? "bullish" : "bearish"}>{s.direction}</StatusBadge>
-                      <span className="text-sm text-foreground">{s.setup_type ?? s.timeframe}</span>
+                {enrichedSignals.map((s) => {
+                  const quality = s.analysis?.setupQuality ?? null;
+                  return (
+                    <div key={s.id} className="p-4 flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => navigate(`/signals/${s.id}`)}>
+                      <div className="flex items-center gap-3">
+                        <StatusBadge variant={s.direction === "long" ? "bullish" : "bearish"}>{s.direction}</StatusBadge>
+                        <span className="text-sm text-foreground">{s.setup_type ?? s.timeframe}</span>
+                        {quality && (
+                          <StatusBadge variant={quality === "A+" || quality === "A" ? "bullish" : quality === "B" ? "neutral" : "bearish"} className="text-[10px]">
+                            {quality}
+                          </StatusBadge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-muted-foreground">RR: <span className="text-foreground font-mono">{s.riskReward.toFixed(2)}</span></span>
+                        <span className="text-muted-foreground">Entry: <span className="text-foreground font-mono">{fmt(Number(s.entry_price))}</span></span>
+                        <span className="text-muted-foreground">Conf: <span className="text-foreground font-semibold">{s.confidence}%</span></span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-muted-foreground">Entry: <span className="text-foreground font-mono">{fmt(Number(s.entry_price))}</span></span>
-                      <span className="text-muted-foreground">Conf: <span className="text-foreground font-semibold">{s.confidence}%</span></span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -235,29 +306,35 @@ export default function PairDetail() {
         {/* ═══ RIGHT COLUMN ═══ */}
         <div className="space-y-5">
           {/* Section 3 — Multi-Timeframe Bias Summary */}
-          <div className="grid grid-cols-2 gap-3">
-            <BiasCard label="Higher TF (D1)" icon={TrendingUp}>
-              <div className="flex items-center gap-1.5">
-                <TrendIcon dir={md.trendD1} />
-                <StatusBadge variant={md.trendD1}>{md.trendD1}</StatusBadge>
-              </div>
-            </BiasCard>
-            <BiasCard label="Execution (H1)" icon={Activity}>
-              <div className="flex items-center gap-1.5">
-                <TrendIcon dir={md.trendH1} />
-                <StatusBadge variant={md.trendH1}>{md.trendH1}</StatusBadge>
-              </div>
-            </BiasCard>
-            <BiasCard label="Volatility" icon={Zap}>
-              <div className="flex items-center justify-between">
-                <StatusBadge variant={md.volatility === "High" ? "bearish" : md.volatility === "Med" ? "neutral" : "bullish"}>{md.volatility}</StatusBadge>
-                <span className="text-[11px] font-mono text-muted-foreground">ATR {md.atr}</span>
-              </div>
-            </BiasCard>
-            <BiasCard label="Structure" icon={Layers}>
-              <StatusBadge variant={structureVariant(md.marketStructure)}>{structureLabel[md.marketStructure]}</StatusBadge>
-            </BiasCard>
-          </div>
+          {md ? (
+            <div className="grid grid-cols-2 gap-3">
+              <BiasCard label="Higher TF (D1)" icon={TrendingUp}>
+                <div className="flex items-center gap-1.5">
+                  <TrendIcon dir={md.trendD1} />
+                  <StatusBadge variant={md.trendD1}>{md.trendD1}</StatusBadge>
+                </div>
+              </BiasCard>
+              <BiasCard label="Execution (H1)" icon={Activity}>
+                <div className="flex items-center gap-1.5">
+                  <TrendIcon dir={md.trendH1} />
+                  <StatusBadge variant={md.trendH1}>{md.trendH1}</StatusBadge>
+                </div>
+              </BiasCard>
+              <BiasCard label="Volatility" icon={Zap}>
+                <div className="flex items-center justify-between">
+                  <StatusBadge variant={md.volatility === "High" ? "bearish" : md.volatility === "Med" ? "neutral" : "bullish"}>{md.volatility}</StatusBadge>
+                  <span className="text-[11px] font-mono text-muted-foreground">ATR {md.atr}</span>
+                </div>
+              </BiasCard>
+              <BiasCard label="Structure" icon={Layers}>
+                <StatusBadge variant={structureVariant(md.marketStructure)}>{structureLabel[md.marketStructure]}</StatusBadge>
+              </BiasCard>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-6 text-center">
+              <p className="text-sm text-muted-foreground">Bias data unavailable — market data sync pending</p>
+            </div>
+          )}
 
           {/* Section 6 — AI Explanation */}
           {analysis && (

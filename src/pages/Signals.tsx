@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useSignals, getQualityForSignal } from "@/hooks/use-signals";
+import { useSignals, getQualityFromEnrichedSignal } from "@/hooks/use-signals";
 import type { EnrichedSignal } from "@/types/trading";
 import SignalCard from "@/components/signals/SignalCard";
 import SignalDetailDrawer from "@/components/signals/SignalDetailDrawer";
@@ -44,7 +44,7 @@ export default function Signals() {
       if (tfFilter !== "All" && s.timeframe !== tfFilter) return false;
       if (dirFilter !== "All" && s.direction !== dirFilter.toLowerCase()) return false;
       if (qualityFilter !== "All") {
-        const q = getQualityForSignal(s.pair);
+        const q = getQualityFromEnrichedSignal(s);
         if (q !== qualityFilter) return false;
       }
       if (confFilter === "80%+" && s.confidence < 80) return false;
@@ -130,7 +130,7 @@ export default function Signals() {
               {filtered.map((s) => {
                 const isLong = s.direction === "long";
                 const isNoTrade = s.verdict === "no_trade";
-                const quality = getQualityForSignal(s.pair);
+                const quality = getQualityFromEnrichedSignal(s);
                 return (
                   <TableRow
                     key={s.id}

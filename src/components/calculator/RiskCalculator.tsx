@@ -9,51 +9,18 @@ import {
 import { Calculator, ShieldAlert, AlertTriangle, Shield } from "lucide-react";
 import { INSTRUMENT_PAIRS, isJpyPair, pipMultiplier } from "@/lib/pip-value";
 import { usePipValue } from "@/hooks/use-pip-value";
-
-// ── Pure calculation helpers ──
+import {
+  calculatePipDistance,
+  evaluateTrade,
+  type AccountState,
+  type RiskProfile,
+  type TradeInputs,
+  type DailyState,
+  type RiskWarning,
+} from "@/lib/risk-engine";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF"] as const;
-
 const PAIRS = [...INSTRUMENT_PAIRS];
-
-function calculateRiskAmount(balance: number, riskPct: number, fixedAmount?: number) {
-  if (fixedAmount && fixedAmount > 0) return fixedAmount;
-  return balance * (riskPct / 100);
-}
-
-function calculatePipDistance(entry: number, sl: number, pair: string) {
-  return Math.abs(entry - sl) * pipMultiplier(pair);
-}
-
-function calculateLotSize(riskAmount: number, pipDistance: number, pipVal: number) {
-  if (pipDistance <= 0 || pipVal <= 0) return 0;
-  return riskAmount / (pipDistance * pipVal);
-}
-
-function calculateExposure(lotSize: number) {
-  return lotSize * 100_000;
-}
-
-// ── Validation ──
-
-interface ValidationErrors {
-  balance?: string;
-  entry?: string;
-  sl?: string;
-  riskPct?: string;
-}
-
-function validate(balance: number, entry: number, sl: number, riskPct: number): ValidationErrors {
-  const errors: ValidationErrors = {};
-  if (balance <= 0) errors.balance = "Must be positive";
-  if (!entry || entry <= 0) errors.entry = "Required";
-  if (!sl || sl <= 0) errors.sl = "Required";
-  if (entry && sl && entry === sl) errors.sl = "Must differ from entry";
-  if (riskPct < 0.1 || riskPct > 10) errors.riskPct = "0.1% – 10%";
-  return errors;
-}
-
-// ── Component ──
 
 interface Props {
   defaultEntry?: number;
@@ -73,11 +40,11 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
   const [openRisk, setOpenRisk] = useState<number | "">("");
   const [conservative, setConservative] = useState(false);
 
-  // Bidirectional SL ↔ pips sync
+  // Bidirectional SL ↔ pips sync — uses engine helper for parity
   const handleSlChange = useCallback(
     (val: number) => {
       setSl(val);
-      if (entry && val) setSlPips(+(calculatePipDistance(entry, val, pair).toFixed(1)));
+      if (entry && val) setSlPips(+(calculatePipDistance(pair, entry, val).toFixed(1)));
     },
     [entry, pair],
   );
@@ -86,7 +53,6 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
     (pips: number) => {
       setSlPips(pips);
       if (entry && pips > 0) {
-        // Assume SL below entry for long, just pick direction based on existing SL
         const direction = sl < entry ? -1 : 1;
         const newSl = entry + (direction * pips) / pipMultiplier(pair);
         setSl(+newSl.toFixed(isJpyPair(pair) ? 3 : 5));
@@ -98,28 +64,43 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
   const handleEntryChange = useCallback(
     (val: number) => {
       setEntry(val);
-      if (sl && val) setSlPips(+(calculatePipDistance(val, sl, pair).toFixed(1)));
+      if (sl && val) setSlPips(+(calculatePipDistance(pair, val, sl).toFixed(1)));
     },
     [sl, pair],
   );
 
-  const errors = useMemo(() => validate(balance, entry, sl, riskPct), [balance, entry, sl, riskPct]);
-  const hasErrors = Object.keys(errors).length > 0;
+  const { pipValue: pipVal, freshness: pipFreshness } = usePipValue(pair);
 
-  const { pipValue: pipVal, isLive: isPipValueLive } = usePipValue(pair);
-  const riskAmount = calculateRiskAmount(balance, riskPct, fixedRisk === "" ? undefined : fixedRisk);
-  const pipDistance = entry && sl ? calculatePipDistance(entry, sl, pair) : 0;
-  let lotSize = calculateLotSize(riskAmount, pipDistance, pipVal);
-  if (conservative) lotSize = lotSize / 2;
-  const exposure = calculateExposure(lotSize);
+  // Single source of truth: the risk engine
+  const evaluation = useMemo(() => {
+    const account: AccountState = { balance, equity, currency };
+    const profile: RiskProfile = {
+      riskPerTradePct: riskPct,
+      maxDailyLossPct: 100, // calculator has no profile cap; the safety thresholds still apply
+      maxTotalOpenRiskPct: 100,
+      conservativeMode: conservative,
+    };
+    const trade: TradeInputs = {
+      pair,
+      entry,
+      stopLoss: sl,
+      pipValueUSD: pipVal,
+      riskMode: fixedRisk !== "" && Number(fixedRisk) > 0 ? "fixed" : "percent",
+      fixedRiskAmount: fixedRisk === "" ? undefined : Number(fixedRisk),
+    };
+    const daily: DailyState = {
+      realizedLossUSD: 0,
+      openRiskUSD: typeof openRisk === "number" ? openRisk : 0,
+    };
+    return evaluateTrade({ account, profile, trade, daily });
+  }, [balance, equity, currency, pair, entry, sl, riskPct, fixedRisk, openRisk, conservative, pipVal]);
 
-  const currentOpenRiskVal = typeof openRisk === "number" ? openRisk : 0;
-  const totalRisk = currentOpenRiskVal + riskAmount;
-  const totalRiskPct = balance > 0 ? (totalRisk / balance) * 100 : 0;
-  const exceedsThreshold = totalRiskPct > 5;
-  const nearDailyLimit = totalRiskPct > 3;
+  const errors = evaluation.validationErrors;
+  const canCalc = Object.keys(errors).length === 0 && evaluation.pipDistance > 0;
 
-  const canCalc = !hasErrors && entry > 0 && sl > 0 && pipDistance > 0;
+  // Warnings the calculator should not double-show inline:
+  // validation_error rows are surfaced inline next to each input via `errors`.
+  const bannerWarnings = evaluation.warnings.filter((w) => w.code !== "validation_error");
 
   return (
     <div className="space-y-5">
@@ -204,7 +185,7 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
               className="bg-muted border-border"
             />
           </Field>
-          <Field label="Stop Loss" error={errors.sl}>
+          <Field label="Stop Loss" error={errors.stopLoss}>
             <Input
               type="number" value={sl || ""}
               onChange={(e) => handleSlChange(Number(e.target.value))}
@@ -260,37 +241,25 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
       <div className="rounded-lg border border-primary/30 bg-primary/5 p-5 space-y-4">
         <h4 className="text-sm font-semibold text-foreground">Results</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <ResultCell label="Max Risk" value={`$${riskAmount.toFixed(2)}`} />
+          <ResultCell label="Max Risk" value={`$${evaluation.riskAmountUSD.toFixed(2)}`} />
           <ResultCell
             label="Lot Size"
-            value={canCalc ? lotSize.toFixed(2) : "—"}
-            sub={canCalc ? `${(lotSize * 10).toFixed(1)} mini · ${(lotSize * 100).toFixed(0)} micro` : undefined}
+            value={canCalc ? evaluation.lotSize.toFixed(2) : "—"}
+            sub={canCalc ? `${(evaluation.lotSize * 10).toFixed(1)} mini · ${(evaluation.lotSize * 100).toFixed(0)} micro` : undefined}
             highlight
           />
-          <ResultCell label="Pip Value" value={`$${pipVal.toFixed(2)}/pip`} sub={isPipValueLive ? "live" : "est."} />
+          <ResultCell label="Pip Value" value={`$${pipVal.toFixed(2)}/pip`} sub={pipFreshness === "live" ? "live" : "estimated"} />
           <ResultCell
             label="Exposure"
-            value={canCalc ? `${currency} ${exposure.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+            value={canCalc ? `${currency} ${evaluation.exposureUnits.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
           />
         </div>
       </div>
 
-      {/* Warnings */}
-      {exceedsThreshold && (
-        <Warning icon={<ShieldAlert className="h-4 w-4" />} variant="destructive">
-          Total open risk would be <strong>{totalRiskPct.toFixed(1)}%</strong> of balance — exceeds the 5% safety threshold.
-        </Warning>
-      )}
-      {!exceedsThreshold && nearDailyLimit && (
-        <Warning icon={<AlertTriangle className="h-4 w-4" />} variant="warning">
-          Total open risk is <strong>{totalRiskPct.toFixed(1)}%</strong> of balance — approaching the 3% daily loss guideline.
-        </Warning>
-      )}
-      {conservative && (
-        <Warning icon={<Shield className="h-4 w-4" />} variant="info">
-          Conservative mode is ON — lot size is halved. Recommended for beginners to reduce emotional pressure and protect capital during the learning curve.
-        </Warning>
-      )}
+      {/* Warnings — driven by engine output */}
+      {bannerWarnings.map((w, i) => (
+        <Warning key={`${w.code}-${i}`} warning={w} />
+      ))}
     </div>
   );
 }
@@ -317,16 +286,20 @@ function ResultCell({ label, value, sub, highlight }: { label: string; value: st
   );
 }
 
-function Warning({ icon, variant, children }: { icon: React.ReactNode; variant: "destructive" | "warning" | "info"; children: React.ReactNode }) {
+function Warning({ warning }: { warning: RiskWarning }) {
+  const variant: "destructive" | "warning" | "info" =
+    warning.level === "block" ? "destructive" : warning.level === "warn" ? "warning" : "info";
   const styles = {
     destructive: "border-destructive/30 bg-destructive/10 text-destructive",
     warning: "border-warning/30 bg-warning/10 text-warning",
     info: "border-primary/30 bg-primary/10 text-primary",
   };
+  const Icon =
+    variant === "destructive" ? ShieldAlert : variant === "warning" ? AlertTriangle : Shield;
   return (
     <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs leading-relaxed ${styles[variant]}`}>
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <span>{children}</span>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{warning.message}</span>
     </div>
   );
 }

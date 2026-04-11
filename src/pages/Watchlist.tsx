@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "@/components/ui/empty-state";
-import StatusBadge from "@/components/ui/status-badge";
+import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
 import { useAllMarketData } from "@/hooks/use-market-data";
-import { getMarketData as getMockMarketData } from "@/data/mockMarketData";
-import type { TrendDirection } from "@/types/trading";
+import type { MarketData, TrendDirection } from "@/types/trading";
+import { freshnessOf, type Freshness } from "@/lib/data-freshness";
 
 const TrendIcon = ({ dir }: { dir: TrendDirection }) => {
   if (dir === "bullish") return <TrendingUp className="h-3 w-3 text-bullish" />;
@@ -52,11 +52,27 @@ export default function Watchlist() {
 
   const availableForAdd = instruments.filter((i) => !favSet.has(i.symbol));
 
+  const blankMarketData = (symbol: string): MarketData => ({
+    symbol, price: 0, spread: 0, dailyChange: 0, dailyChangePct: 0, atr: 0,
+    volatility: "Low", trendH1: "neutral", trendH4: "neutral", trendD1: "neutral",
+    activeSession: "Closed", newsRisk: false, supportLevel: 0, resistanceLevel: 0,
+    sessionHigh: 0, sessionLow: 0, prevDayHigh: 0, prevDayLow: 0, marketStructure: "ranging",
+  });
+
   const rows = useMemo(() => {
     let list = instruments.map((i) => {
-      const md = liveMarketData?.[i.symbol] ?? getMockMarketData(i.symbol);
+      const live = liveMarketData?.[i.symbol] ?? null;
+      const md = live ?? blankMarketData(i.symbol);
       const sig = signalMap[i.symbol];
-      return { ...md, symbol: i.symbol, isFav: favSet.has(i.symbol), signal: sig ?? null };
+      const freshness = freshnessOf(live?.updatedAt, !!live);
+      return {
+        ...md,
+        symbol: i.symbol,
+        isFav: favSet.has(i.symbol),
+        signal: sig ?? null,
+        freshness,
+        updatedAt: live?.updatedAt ?? null,
+      };
     });
 
     if (search) list = list.filter((r) => r.symbol.toLowerCase().includes(search.toLowerCase()));
@@ -70,12 +86,35 @@ export default function Watchlist() {
     return list;
   }, [instruments, search, favOnly, filterSignal, filterSession, filterTrend, filterVol, favSet, signalMap, liveMarketData]);
 
+  // Worst freshness across visible rows: any fallback → demo, any cached → cached, else live.
+  const headerFreshness: Freshness | null = rows.length === 0
+    ? null
+    : rows.some((r) => r.freshness === "fallback")
+    ? "fallback"
+    : rows.some((r) => r.freshness === "cached")
+    ? "cached"
+    : "live";
+
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-4 pb-mobile-nav">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Market Watch</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-foreground">Market Watch</h1>
+            {headerFreshness && (
+              <FreshnessBadge
+                freshness={headerFreshness}
+                title={
+                  headerFreshness === "live"
+                    ? "All visible rows updated within the last 10 minutes"
+                    : headerFreshness === "cached"
+                    ? "At least one row is older than 10 minutes"
+                    : "At least one row has no live data yet"
+                }
+              />
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-0.5">Monitor instruments, trends, and trading opportunities</p>
         </div>
         <div className="flex items-center gap-2">
@@ -181,13 +220,33 @@ export default function Watchlist() {
                         <Star className={`h-3.5 w-3.5 ${r.isFav ? "fill-warning text-warning" : "text-muted-foreground"}`} />
                       </button>
                     </TableCell>
-                    <TableCell className="font-semibold text-foreground">{r.symbol}</TableCell>
-                    <TableCell className="text-right font-mono text-sm text-foreground">{r.price.toFixed(r.price > 100 ? 2 : 4)}</TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">{r.spread.toFixed(1)}</TableCell>
+                    <TableCell className="font-semibold text-foreground">
+                      <div className="flex items-center gap-2">
+                        <span>{r.symbol}</span>
+                        {r.freshness !== "live" && (
+                          <FreshnessBadge
+                            freshness={r.freshness}
+                            title={
+                              r.freshness === "fallback"
+                                ? "No live data — Edge Function hasn't returned this pair yet"
+                                : r.updatedAt
+                                ? `Updated ${new Date(r.updatedAt).toLocaleString()}`
+                                : "Cached"
+                            }
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm text-foreground">{r.freshness === "fallback" ? "—" : r.price.toFixed(r.price > 100 ? 2 : 4)}</TableCell>
+                    <TableCell className="text-right text-sm text-muted-foreground">{r.freshness === "fallback" ? "—" : r.spread.toFixed(1)}</TableCell>
                     <TableCell className="text-right">
-                      <span className={`text-sm font-medium ${r.dailyChangePct > 0 ? "text-bullish" : r.dailyChangePct < 0 ? "text-bearish" : "text-muted-foreground"}`}>
-                        {r.dailyChangePct > 0 ? "+" : ""}{r.dailyChangePct.toFixed(2)}%
-                      </span>
+                      {r.freshness !== "fallback" ? (
+                        <span className={`text-sm font-medium ${r.dailyChangePct > 0 ? "text-bullish" : r.dailyChangePct < 0 ? "text-bearish" : "text-muted-foreground"}`}>
+                          {r.dailyChangePct > 0 ? "+" : ""}{r.dailyChangePct.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       <StatusBadge variant={r.volatility === "High" ? "bearish" : r.volatility === "Med" ? "neutral" : "bullish"}>

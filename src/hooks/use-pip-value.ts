@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useAllMarketData } from "@/hooks/use-market-data";
 import { calculatePipValueUSD, getDefaultPipValueUSD } from "@/lib/pip-value";
+import type { Freshness } from "@/lib/data-freshness";
 
 function buildPricesMap(data: Record<string, { price: number }> | null | undefined): Record<string, number> | null {
   if (!data) return null;
@@ -11,7 +12,7 @@ function buildPricesMap(data: Record<string, { price: number }> | null | undefin
   return prices;
 }
 
-export function usePipValue(pair: string): { pipValue: number; isLive: boolean } {
+export function usePipValue(pair: string): { pipValue: number; freshness: Freshness } {
   const { data: allData } = useAllMarketData();
 
   return useMemo(() => {
@@ -19,14 +20,14 @@ export function usePipValue(pair: string): { pipValue: number; isLive: boolean }
     if (prices) {
       const value = calculatePipValueUSD(pair, prices);
       if (value !== null) {
-        return { pipValue: Math.round(value * 100) / 100, isLive: true };
+        return { pipValue: Math.round(value * 100) / 100, freshness: "live" as const };
       }
     }
-    return { pipValue: getDefaultPipValueUSD(pair), isLive: false };
+    return { pipValue: getDefaultPipValueUSD(pair), freshness: "fallback" as const };
   }, [allData, pair]);
 }
 
-export function usePipValues(): { getPipValue: (pair: string) => number; isLive: boolean } {
+export function usePipValues(): { getPipValue: (pair: string) => number; freshness: Freshness } {
   const { data: allData } = useAllMarketData();
 
   return useMemo(() => {
@@ -37,12 +38,12 @@ export function usePipValues(): { getPipValue: (pair: string) => number; isLive:
           const value = calculatePipValueUSD(pair, prices);
           return value !== null ? Math.round(value * 100) / 100 : getDefaultPipValueUSD(pair);
         },
-        isLive: true,
+        freshness: "live" as const,
       };
     }
     return {
       getPipValue: getDefaultPipValueUSD,
-      isLive: false,
+      freshness: "fallback" as const,
     };
   }, [allData]);
 }

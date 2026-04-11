@@ -13,7 +13,8 @@
 //   No batch  → all pairs (requires longer runtime, may timeout)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.101.1";
-import { analyzeForSignal, type OHLCV, type TimeframeData, type SignalOutput } from "../_shared/signal-engine.ts";
+import { analyzeForSignal, computeIndicators, type OHLCV, type TimeframeData, type SignalOutput, type TimeframeIndicators } from "../_shared/signal-engine.ts";
+import { generateExplanation, PROMPT_VERSION, type ExplanationInputs } from "../_shared/explanation-service.ts";
 
 const TWELVE_DATA_BASE = "https://api.twelvedata.com";
 
@@ -108,166 +109,103 @@ async function fetchAllOHLCV(
   return results;
 }
 
-// ── AI explanation layer ───────────────────────────────────────
-// Enhances SignalOutput text fields with Claude-generated explanations.
-// NEVER modifies scores, confidence, verdict, or numerical outputs.
-// Falls back to template text (already on SignalOutput) on any failure.
+// ── Candle persistence helpers ────────────────────────────────
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const AI_MODEL = "claude-haiku-4-5-20251001";
-const AI_MAX_TOKENS = 512;
-const AI_TIMEOUT_MS = 10_000;
+const INTERVAL_TO_TIMEFRAME: Record<string, string> = {
+  "1h": "1h",
+  "4h": "4h",
+  "1day": "1d",
+};
 
-const AI_SYSTEM_PROMPT = `You are a forex trading analyst for PipPilot AI. You explain trading signals clearly and accurately.
-
-RULES:
-- You EXPLAIN signals. You never modify scores, confidence, verdict, or trade levels.
-- Beginner explanation: 2-4 sentences. Plain language, no jargon. Explain the pattern and why it matters.
-- Expert explanation: 2-4 sentences. Reference indicator values, multi-timeframe alignment, key levels, market structure.
-- Reasons for: 3-6 bullet points supporting the trade direction.
-- Reasons against: 2-4 bullet points identifying risks or counter-signals.
-- No-trade reason (only if verdict is no_trade): 1-2 sentences explaining why.
-
-Respond in EXACTLY this format:
-BEGINNER:
-<text>
-EXPERT:
-<text>
-REASONS_FOR:
-- <reason>
-- <reason>
-REASONS_AGAINST:
-- <reason>
-- <reason>
-NO_TRADE_REASON:
-<text or N/A>`;
-
-interface AIExplanation {
-  beginner: string;
-  expert: string;
-  reasonsFor: string[];
-  reasonsAgainst: string[];
-  noTradeReason: string | null;
-}
-
-async function callClaudeAPI(context: Record<string, unknown>, apiKey: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-  try {
-    const res = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        max_tokens: AI_MAX_TOKENS,
-        system: AI_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: JSON.stringify(context) }],
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (!res.ok) {
-      console.error(`Anthropic API error: ${res.status} ${await res.text()}`);
-      return null;
-    }
-    const data = await res.json();
-    const block = data?.content?.[0];
-    if (!block || block.type !== "text") return null;
-    return block.text as string;
-  } catch (err) {
-    clearTimeout(timeoutId);
-    console.error("Anthropic API call failed:", err);
-    return null;
-  }
-}
-
-function parseAIResponse(text: string): AIExplanation | null {
-  try {
-    const sections = {
-      BEGINNER: "",
-      EXPERT: "",
-      REASONS_FOR: "",
-      REASONS_AGAINST: "",
-      NO_TRADE_REASON: "",
-    };
-    const markers = Object.keys(sections) as (keyof typeof sections)[];
-    let current: keyof typeof sections | null = null;
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      const marker = markers.find((m) => trimmed === `${m}:` || trimmed.startsWith(`${m}:`));
-      if (marker) {
-        current = marker;
-        const inline = trimmed.slice(marker.length + 1).trim();
-        if (inline) sections[marker] += inline + "\n";
-        continue;
+function buildCandleRows(
+  ohlcvData: Map<string, OHLCV[] | null>,
+  symbols: string[],
+  fetchedAt: string,
+): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (const symbol of symbols) {
+    for (const [interval, tf] of Object.entries(INTERVAL_TO_TIMEFRAME)) {
+      const candles = ohlcvData.get(`${symbol}|${interval}`);
+      if (!candles) continue;
+      for (const c of candles) {
+        rows.push({
+          symbol,
+          timeframe: tf,
+          candle_time: c.datetime,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: null,
+          fetched_at: fetchedAt,
+        });
       }
-      if (current) sections[current] += line + "\n";
     }
-
-    const parseBullets = (raw: string): string[] =>
-      raw
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.startsWith("- ") || l.startsWith("• "))
-        .map((l) => l.replace(/^[-•]\s*/, "").trim())
-        .filter((l) => l.length > 0);
-
-    const beginner = sections.BEGINNER.trim();
-    const expert = sections.EXPERT.trim();
-    const reasonsFor = parseBullets(sections.REASONS_FOR);
-    const reasonsAgainst = parseBullets(sections.REASONS_AGAINST);
-    const ntrRaw = sections.NO_TRADE_REASON.trim();
-    const noTradeReason = ntrRaw && ntrRaw.toUpperCase() !== "N/A" ? ntrRaw : null;
-
-    if (!beginner || !expert || reasonsFor.length === 0 || reasonsAgainst.length === 0) {
-      console.warn("AI response missing required sections, falling back to template");
-      return null;
-    }
-    return { beginner, expert, reasonsFor, reasonsAgainst, noTradeReason };
-  } catch (err) {
-    console.error("Failed to parse AI response:", err);
-    return null;
   }
+  return rows;
 }
 
-async function enhanceWithAI(signal: SignalOutput, apiKey: string): Promise<void> {
-  const context = {
-    pair: signal.pair,
-    direction: signal.direction,
-    setupType: signal.setupType,
-    timeframe: signal.timeframe,
-    confidence: signal.confidence,
-    setupQuality: signal.setupQuality,
-    verdict: signal.verdict,
-    entryPrice: signal.entryPrice,
-    entryZone: signal.entryZone,
-    stopLoss: signal.stopLoss,
-    tp1: signal.tp1,
-    tp2: signal.tp2,
-    tp3: signal.tp3,
-    invalidation: signal.invalidation,
-    trendH1: signal.trendH1,
-    trendH4: signal.trendH4,
-    trendD1: signal.trendD1,
-    marketStructure: signal.marketStructure,
-    supportLevel: signal.supportLevel,
-    resistanceLevel: signal.resistanceLevel,
+function buildIndicatorRows(
+  runId: string,
+  symbol: string,
+  indicators: Record<string, TimeframeIndicators>,
+  createdAt: string,
+): Array<Record<string, unknown>> {
+  return Object.entries(indicators).map(([tf, ind]) => ({
+    run_id: runId,
+    symbol,
+    timeframe: tf,
+    price: ind.price,
+    ema20: Number.isFinite(ind.ema20) ? ind.ema20 : null,
+    ema50: Number.isFinite(ind.ema50) ? ind.ema50 : null,
+    ema200: Number.isFinite(ind.ema200) ? ind.ema200 : null,
+    rsi14: Number.isFinite(ind.rsi14) ? ind.rsi14 : null,
+    atr14: Number.isFinite(ind.atr14) ? ind.atr14 : null,
+    macd_hist: Number.isFinite(ind.macdHist) ? ind.macdHist : null,
+    bb_upper: Number.isFinite(ind.bbUpper) ? ind.bbUpper : null,
+    bb_lower: Number.isFinite(ind.bbLower) ? ind.bbLower : null,
+    bb_width: Number.isFinite(ind.bbWidth) ? ind.bbWidth : null,
+    trend: ind.trend,
+    created_at: createdAt,
+  }));
+}
+
+// ── AI explanation layer ───────────────────────────────────────
+// Owned by `_shared/explanation-service.ts` (Phase 8). The service
+// receives an `ExplanationInputs` snapshot + the deterministic
+// fallback text and decides whether to use Claude or fall back. It
+// NEVER touches scores, confidence, verdict, or numerical outputs.
+
+interface AICounters {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}
+
+function buildExplanationInputs(s: SignalOutput): ExplanationInputs {
+  return {
+    pair: s.pair,
+    direction: s.direction,
+    setupType: s.setupType,
+    timeframe: s.timeframe,
+    confidence: s.confidence,
+    setupQuality: s.setupQuality,
+    verdict: s.verdict,
+    entryPrice: s.entryPrice,
+    entryZone: s.entryZone,
+    stopLoss: s.stopLoss,
+    tp1: s.tp1,
+    tp2: s.tp2,
+    tp3: s.tp3,
+    invalidation: s.invalidation,
+    trendH1: s.trendH1,
+    trendH4: s.trendH4,
+    trendD1: s.trendD1,
+    marketStructure: s.marketStructure,
+    supportLevel: s.supportLevel,
+    resistanceLevel: s.resistanceLevel,
   };
-  const text = await callClaudeAPI(context, apiKey);
-  if (!text) return;
-  const parsed = parseAIResponse(text);
-  if (!parsed) return;
-  signal.beginnerExplanation = parsed.beginner;
-  signal.expertExplanation = parsed.expert;
-  signal.reasonsFor = parsed.reasonsFor;
-  signal.reasonsAgainst = parsed.reasonsAgainst;
-  if (signal.verdict === "no_trade" && parsed.noTradeReason) {
-    signal.noTradeReason = parsed.noTradeReason;
-  }
 }
 
 Deno.serve(async (req) => {
@@ -288,17 +226,18 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const now = new Date();
-    const utcHour = now.getUTCHours();
+    const startedAt = new Date();
+    const utcHour = startedAt.getUTCHours();
     const isSessionActive = getActiveSession(utcHour);
 
     // Determine which pairs to process
     const url = new URL(req.url);
     const batchParam = url.searchParams.get("batch");
     let symbols: string[];
+    let batchIdx: number | null = null;
 
     if (batchParam !== null) {
-      const batchIdx = parseInt(batchParam, 10);
+      batchIdx = parseInt(batchParam, 10);
       const start = batchIdx * PAIRS_PER_BATCH;
       symbols = ALL_SYMBOLS.slice(start, start + PAIRS_PER_BATCH);
       if (symbols.length === 0) {
@@ -312,11 +251,81 @@ Deno.serve(async (req) => {
       console.log(`Processing all ${symbols.length} pairs (no batch param)`);
     }
 
+    // ── Create generation run record ─────────────────────────────
+    const { data: runRow, error: runInsertErr } = await supabase
+      .from("generation_runs")
+      .insert({
+        function_name: "generate-signals",
+        batch_index: batchIdx,
+        pairs_processed: symbols,
+        started_at: startedAt.toISOString(),
+        status: "running",
+      })
+      .select("id")
+      .single();
+
+    if (runInsertErr) console.error("Failed to create generation run:", runInsertErr.message);
+    const runId: string | null = runRow?.id ?? null;
+
+    // Phase 8: per-run AI counters surfaced on the generation_runs row.
+    const aiCounters: AICounters = { attempted: 0, succeeded: 0, failed: 0, skipped: 0 };
+
+    // Helper to finalize the run record
+    async function finalizeRun(
+      status: "success" | "partial" | "failed",
+      candleCount: number,
+      signalCount: number,
+      apiCredits: number,
+      errorMsg?: string,
+    ) {
+      if (!runId) return;
+      const finished = new Date();
+      await supabase.from("generation_runs").update({
+        finished_at: finished.toISOString(),
+        duration_ms: finished.getTime() - startedAt.getTime(),
+        status,
+        candles_fetched: candleCount,
+        signals_created: signalCount,
+        api_credits_used: apiCredits,
+        error_message: errorMsg ?? null,
+        ai_calls_attempted: aiCounters.attempted,
+        ai_calls_succeeded: aiCounters.succeeded,
+        ai_calls_failed: aiCounters.failed,
+        ai_calls_skipped: aiCounters.skipped,
+      }).eq("id", runId);
+    }
+
     console.log(`Fetching OHLCV for ${symbols.length} pairs across 3 timeframes...`);
     const ohlcvData = await fetchAllOHLCV(symbols, apiKey);
 
+    // Count how many candles were fetched and API credits used
+    let totalCandlesFetched = 0;
+    let totalApiCredits = 0;
+    for (const [, candles] of ohlcvData) {
+      if (candles) {
+        totalCandlesFetched += candles.length;
+        totalApiCredits += 1; // 1 credit per successful API call
+      }
+    }
+
+    // ── Persist OHLCV candles ────────────────────────────────────
+    const candleRows = buildCandleRows(ohlcvData, symbols, startedAt.toISOString());
+    if (candleRows.length > 0) {
+      // Upsert in batches of 500 to avoid payload limits
+      const CANDLE_BATCH = 500;
+      for (let i = 0; i < candleRows.length; i += CANDLE_BATCH) {
+        const batch = candleRows.slice(i, i + CANDLE_BATCH);
+        const { error: candleErr } = await supabase
+          .from("ohlcv_candles")
+          .upsert(batch, { onConflict: "symbol,timeframe,candle_time" });
+        if (candleErr) console.error(`ohlcv_candles upsert error (batch ${i}):`, candleErr.message);
+      }
+      console.log(`Persisted ${candleRows.length} candle rows`);
+    }
+
     const signalOutputs: SignalOutput[] = [];
     const skipped: string[] = [];
+    const allIndicatorRows: Array<Record<string, unknown>> = [];
 
     for (const symbol of symbols) {
       const h1 = ohlcvData.get(`${symbol}|1h`);
@@ -329,22 +338,62 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // ── Compute & capture indicator snapshots ──────────────────
+      if (runId) {
+        const indH1 = computeIndicators(h1);
+        const indH4 = computeIndicators(h4);
+        const indD1 = computeIndicators(d1);
+        allIndicatorRows.push(
+          ...buildIndicatorRows(runId, symbol, { "1h": indH1, "4h": indH4, "1d": indD1 }, startedAt.toISOString()),
+        );
+      }
+
       const tfData: TimeframeData = { h1, h4, d1 };
       const result = analyzeForSignal(symbol, tfData, isSessionActive);
 
       if (result) {
-        if (anthropicKey) {
-          await enhanceWithAI(result, anthropicKey);
-        }
+        // Phase 8: route every signal through the explanation service.
+        // The service receives the deterministic templates as `fallback`
+        // and decides whether to use Claude or fall through.
+        aiCounters.attempted++;
+        const explanation = await generateExplanation({
+          inputs: buildExplanationInputs(result),
+          fallback: {
+            beginnerExplanation: result.beginnerExplanation,
+            expertExplanation: result.expertExplanation,
+            reasonsFor: result.reasonsFor,
+            reasonsAgainst: result.reasonsAgainst,
+            noTradeReason: result.noTradeReason,
+          },
+          apiKey: anthropicKey ?? null,
+          logger: (msg, meta) => console.log(msg, meta ?? {}),
+        });
+        if (explanation.status === "ai_success") aiCounters.succeeded++;
+        else if (explanation.status === "ai_failed") aiCounters.failed++;
+        else if (explanation.status === "ai_skipped") aiCounters.skipped++;
+        result.beginnerExplanation = explanation.beginnerExplanation;
+        result.expertExplanation = explanation.expertExplanation;
+        result.reasonsFor = explanation.reasonsFor;
+        result.reasonsAgainst = explanation.reasonsAgainst;
+        result.noTradeReason = explanation.noTradeReason;
+        result.explanationMeta = explanation;
         signalOutputs.push(result);
       } else {
         console.log(`No setup detected for ${symbol}`);
       }
     }
 
+    // ── Persist indicator snapshots ──────────────────────────────
+    if (allIndicatorRows.length > 0) {
+      const { error: indErr } = await supabase.from("indicator_snapshots").insert(allIndicatorRows);
+      if (indErr) console.error("indicator_snapshots insert error:", indErr.message);
+      else console.log(`Saved ${allIndicatorRows.length} indicator snapshots`);
+    }
+
     if (signalOutputs.length === 0) {
+      await finalizeRun("success", totalCandlesFetched, 0, totalApiCredits);
       return new Response(
-        JSON.stringify({ success: true, message: "No setups detected", skipped, pairs: symbols }),
+        JSON.stringify({ success: true, message: "No setups detected", skipped, pairs: symbols, runId }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }
@@ -353,7 +402,7 @@ Deno.serve(async (req) => {
     const pairsWithNewSignals = signalOutputs.map((s) => s.pair);
     const { error: expireError } = await supabase
       .from("signals")
-      .update({ status: "expired", updated_at: now.toISOString() })
+      .update({ status: "expired", updated_at: startedAt.toISOString() })
       .in("pair", pairsWithNewSignals)
       .eq("status", "active");
 
@@ -373,11 +422,12 @@ Deno.serve(async (req) => {
       verdict: s.verdict,
       status: s.verdict === "trade" ? "active" : "monitoring",
       setup_type: s.setupType,
+      risk_reward: s.riskReward,
       ai_reasoning: s.expertExplanation,
-      created_by_ai: true,
+      created_by_ai: s.explanationMeta?.status === "ai_success",
       invalidation_reason: s.invalidation,
-      created_at: now.toISOString(),
-      updated_at: now.toISOString(),
+      created_at: startedAt.toISOString(),
+      updated_at: startedAt.toISOString(),
     }));
 
     const { data: insertedSignals, error: signalError } = await supabase
@@ -385,7 +435,10 @@ Deno.serve(async (req) => {
       .insert(signalRows)
       .select("id, pair");
 
-    if (signalError) throw new Error(`Signal insert error: ${signalError.message}`);
+    if (signalError) {
+      await finalizeRun("failed", totalCandlesFetched, 0, totalApiCredits, signalError.message);
+      throw new Error(`Signal insert error: ${signalError.message}`);
+    }
 
     const signalIdMap = new Map<string, string>();
     for (const sig of insertedSignals ?? []) {
@@ -393,28 +446,39 @@ Deno.serve(async (req) => {
     }
 
     // Insert pair_analyses
-    const analysisRows = signalOutputs.map((s) => ({
-      signal_id: signalIdMap.get(s.pair) ?? null,
-      pair: s.pair,
-      setup_type: s.setupType,
-      direction: s.direction,
-      entry_zone_low: s.entryZone[0],
-      entry_zone_high: s.entryZone[1],
-      stop_loss: s.stopLoss,
-      tp1: s.tp1,
-      tp2: s.tp2,
-      tp3: s.tp3,
-      confidence: s.confidence,
-      setup_quality: s.setupQuality,
-      invalidation: s.invalidation,
-      beginner_explanation: s.beginnerExplanation,
-      expert_explanation: s.expertExplanation,
-      reasons_for: s.reasonsFor,
-      reasons_against: s.reasonsAgainst,
-      no_trade_reason: s.noTradeReason,
-      verdict: s.verdict,
-      created_at: now.toISOString(),
-    }));
+    const analysisRows = signalOutputs.map((s) => {
+      const meta = s.explanationMeta;
+      return {
+        signal_id: signalIdMap.get(s.pair) ?? null,
+        pair: s.pair,
+        setup_type: s.setupType,
+        direction: s.direction,
+        entry_zone_low: s.entryZone[0],
+        entry_zone_high: s.entryZone[1],
+        stop_loss: s.stopLoss,
+        tp1: s.tp1,
+        tp2: s.tp2,
+        tp3: s.tp3,
+        confidence: s.confidence,
+        setup_quality: s.setupQuality,
+        risk_reward: s.riskReward,
+        invalidation: s.invalidation,
+        beginner_explanation: s.beginnerExplanation,
+        expert_explanation: s.expertExplanation,
+        reasons_for: s.reasonsFor,
+        reasons_against: s.reasonsAgainst,
+        no_trade_reason: s.noTradeReason,
+        verdict: s.verdict,
+        created_at: startedAt.toISOString(),
+        // Phase 8: explanation metadata.
+        explanation_source: meta?.source ?? "template",
+        explanation_status: meta?.status ?? "template_only",
+        explanation_model: meta?.model ?? null,
+        explanation_prompt_version: meta?.promptVersion ?? PROMPT_VERSION,
+        explanation_generated_at: meta?.generatedAt ?? startedAt.toISOString(),
+        explanation_error_code: meta?.errorCode ?? null,
+      };
+    });
 
     const { error: analysisError } = await supabase.from("pair_analyses").insert(analysisRows);
     if (analysisError) console.error("pair_analyses insert error:", analysisError.message);
@@ -428,7 +492,7 @@ Deno.serve(async (req) => {
       market_structure: s.marketStructure,
       support_level: s.supportLevel,
       resistance_level: s.resistanceLevel,
-      updated_at: now.toISOString(),
+      updated_at: startedAt.toISOString(),
     }));
 
     const { error: trendError } = await supabase
@@ -436,6 +500,10 @@ Deno.serve(async (req) => {
       .upsert(trendUpdates, { onConflict: "symbol" });
 
     if (trendError) console.error("market_data_cache trend update error:", trendError.message);
+
+    // ── Finalize run record ──────────────────────────────────────
+    const runStatus = skipped.length > 0 ? "partial" : "success";
+    await finalizeRun(runStatus, totalCandlesFetched, signalOutputs.length, totalApiCredits);
 
     return new Response(
       JSON.stringify({
@@ -451,7 +519,8 @@ Deno.serve(async (req) => {
           setup: s.setupType,
         })),
         skipped,
-        timestamp: now.toISOString(),
+        runId,
+        timestamp: startedAt.toISOString(),
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
