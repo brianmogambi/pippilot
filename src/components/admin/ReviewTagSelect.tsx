@@ -3,6 +3,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const tags = [
   { value: "good_signal", label: "✅ Good Signal" },
   { value: "false_positive", label: "❌ False Positive" },
+  { value: "weak_setup", label: "⚠️ Weak Setup" },
+  { value: "overconfident", label: "📈 Overconfident" },
   { value: "needs_review", label: "🔍 Needs Review" },
 ];
 

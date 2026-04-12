@@ -97,6 +97,8 @@ export default function AdminReview() {
             <StatBox label="Good Rate" value={`${stats.goodRate}%`} />
             <StatBox label="Good" value={stats.good} />
             <StatBox label="False Pos." value={stats.falsePositive} />
+            <StatBox label="Weak Setup" value={stats.weakSetup} />
+            <StatBox label="Overconfident" value={stats.overconfident} />
             <StatBox label="Avg Conf ✅" value={stats.avgConfGood} />
             <StatBox label="Avg Conf ❌" value={stats.avgConfFP} />
           </div>
@@ -105,7 +107,7 @@ export default function AdminReview() {
             <FilterSelect label="Pair" value={sPair} onChange={setSPair} options={uniquePairs} />
             <FilterSelect label="Status" value={sStatus} onChange={setSStatus} options={["active", "expired", "invalidated"]} />
             <FilterSelect label="Setup" value={sSetup} onChange={setSSetup} options={uniqueSetups as string[]} />
-            <FilterSelect label="Review" value={sTag} onChange={setSTag} options={["unreviewed", "good_signal", "false_positive", "needs_review"]} />
+            <FilterSelect label="Review" value={sTag} onChange={setSTag} options={["unreviewed", "good_signal", "false_positive", "weak_setup", "overconfident", "needs_review"]} />
           </div>
 
           <Card className="border-border/50">
@@ -181,7 +183,7 @@ export default function AdminReview() {
             <FilterSelect label="Pair" value={aPair} onChange={setAPair} options={[...new Set(alerts.map((a) => a.pair))].sort()} />
             <FilterSelect label="Type" value={aType} onChange={setAType} options={[...new Set(alerts.map((a) => a.type))].sort()} />
             <FilterSelect label="Severity" value={aSev} onChange={setASev} options={["info", "warning", "critical"]} />
-            <FilterSelect label="Review" value={aTag} onChange={setATag} options={["unreviewed", "good_signal", "false_positive", "needs_review"]} />
+            <FilterSelect label="Review" value={aTag} onChange={setATag} options={["unreviewed", "good_signal", "false_positive", "weak_setup", "overconfident", "needs_review"]} />
           </div>
 
           <Card className="border-border/50">

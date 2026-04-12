@@ -110,6 +110,8 @@ export function useSignalReviewStats(signals: any[]) {
   const reviewed = signals.filter((s) => s.review_tag).length;
   const good = signals.filter((s) => s.review_tag === "good_signal").length;
   const falsePositive = signals.filter((s) => s.review_tag === "false_positive").length;
+  const weakSetup = signals.filter((s) => s.review_tag === "weak_setup").length;
+  const overconfident = signals.filter((s) => s.review_tag === "overconfident").length;
   const needsReview = signals.filter((s) => s.review_tag === "needs_review").length;
   const avgConfGood = good > 0 ? Math.round(signals.filter((s) => s.review_tag === "good_signal").reduce((a, s) => a + s.confidence, 0) / good) : 0;
   const avgConfFP = falsePositive > 0 ? Math.round(signals.filter((s) => s.review_tag === "false_positive").reduce((a, s) => a + s.confidence, 0) / falsePositive) : 0;
@@ -120,6 +122,8 @@ export function useSignalReviewStats(signals: any[]) {
     reviewedPct: total > 0 ? Math.round((reviewed / total) * 100) : 0,
     good,
     falsePositive,
+    weakSetup,
+    overconfident,
     needsReview,
     goodRate: reviewed > 0 ? Math.round((good / reviewed) * 100) : 0,
     avgConfGood,

@@ -175,15 +175,16 @@ supabase/
 | 7 | Alert engine v2 (event-aware dedup, alert_state_log) | ✅ Done |
 | 8 | Explanation hardening (versioned prompts, metadata audit trail) | ✅ Done |
 | 9 | Frontend real-data conversion (Live/Cached/Demo badges) | ✅ Done |
+| 10 | Backtest + replay foundation (deterministic historical replay, R-multiple metrics) — see [BACKTEST_ENGINE.md](BACKTEST_ENGINE.md) | ✅ Done |
+| 11 | Signal analytics & review (equity curve, confidence calibration, no-trade quality, live outcome resolver) — see [SIGNAL_ANALYTICS.md](SIGNAL_ANALYTICS.md) | ✅ Done |
 
 ## Future Roadmap
 
 | Phase | Focus |
 |-------|-------|
-| **Phase 10** | Advanced analytics (equity curve, drawdown, per-pair P/L) |
-| **Phase 11** | Automated alerts (email, push, Telegram) |
-| **Phase 12** | Optional broker integration (position tracking, not auto-trading) |
-| **Phase 13** | AI learning from feedback + personalized recommendations |
+| **Phase 12** | Analytics surface (user-facing dashboards backed by `useLiveSignalAnalytics`) |
+| **Phase 13** | Confidence recalibration (only if Phase 12 calibration data justifies it) |
+| **Phase 14** | Optional broker integration (position tracking, not auto-trading) |
 
 ## Documentation
 
