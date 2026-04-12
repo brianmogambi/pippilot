@@ -49,10 +49,18 @@ const STRATEGIES = [
 
 const ALERT_CHANNELS = [
   { value: "in_app", label: "In-App", available: true },
-  { value: "email", label: "Email", available: false },
+  { value: "email", label: "Email", available: true },
+  { value: "telegram", label: "Telegram", available: true },
   { value: "push", label: "Push", available: false },
-  { value: "telegram", label: "Telegram", available: false },
 ];
+
+const SEVERITIES = ["info", "warning", "critical"] as const;
+const SEVERITY_LABELS: Record<string, string> = {
+  info: "Info",
+  warning: "Warning",
+  critical: "Critical",
+};
+const OUTBOUND_CHANNELS = ["email", "telegram"] as const;
 
 const CURRENCIES = ["USD", "EUR", "GBP", "AUD", "CAD", "JPY", "CHF", "NZD"];
 
@@ -99,6 +107,9 @@ export default function SettingsPage() {
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [alertChannels, setAlertChannels] = useState<string[]>(["in_app"]);
+  const [telegramChatId, setTelegramChatId] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("");
+  const [severityRouting, setSeverityRouting] = useState<Record<string, string[]> | null>(null);
 
   const [timezone, setTimezone] = useState("UTC");
 
@@ -119,6 +130,9 @@ export default function SettingsPage() {
       setPreferredStrategies(profile.preferred_strategies || []);
       setNotificationsEnabled(profile.notifications_enabled ?? true);
       setAlertChannels(profile.alert_channels || ["in_app"]);
+      setTelegramChatId(profile.telegram_chat_id || "");
+      setNotificationEmail(profile.notification_email || "");
+      setSeverityRouting(profile.severity_channel_routing as Record<string, string[]> | null);
       setTimezone(profile.timezone || "UTC");
     }
   }, [profile]);
@@ -153,6 +167,9 @@ export default function SettingsPage() {
         preferred_strategies: preferredStrategies,
         notifications_enabled: notificationsEnabled,
         alert_channels: alertChannels,
+        telegram_chat_id: telegramChatId || null,
+        notification_email: notificationEmail || null,
+        severity_channel_routing: severityRouting,
         timezone,
       }).eq("user_id", user.id),
       supabase.from("user_risk_profiles").update({
@@ -357,6 +374,78 @@ export default function SettingsPage() {
             </label>
           ))}
         </div>
+
+        {alertChannels.includes("email") && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Notification Email</Label>
+            <Input
+              type="email"
+              value={notificationEmail}
+              onChange={(e) => setNotificationEmail(e.target.value)}
+              placeholder="Uses your login email by default"
+              className="bg-muted border-border"
+            />
+          </div>
+        )}
+
+        {alertChannels.includes("telegram") && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Telegram Chat ID</Label>
+            <Input
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value.replace(/[^0-9-]/g, ""))}
+              placeholder="e.g. 123456789"
+              className="bg-muted border-border"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Message <span className="font-medium">/start</span> to <span className="font-medium">@PipPilotBot</span> on Telegram to get your Chat ID
+            </p>
+          </div>
+        )}
+
+        {alertChannels.some((ch) => ch === "email" || ch === "telegram") && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Severity Routing</Label>
+            <p className="text-[10px] text-muted-foreground">Choose which channels receive each severity level. When unconfigured, all enabled channels receive all alerts.</p>
+            <div className="rounded-lg border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="text-left p-2 text-xs text-muted-foreground font-medium">Severity</th>
+                    {OUTBOUND_CHANNELS.filter((ch) => alertChannels.includes(ch)).map((ch) => (
+                      <th key={ch} className="text-center p-2 text-xs text-muted-foreground font-medium capitalize">{ch}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {SEVERITIES.map((sev) => (
+                    <tr key={sev} className="border-t border-border">
+                      <td className="p-2 text-xs text-foreground">{SEVERITY_LABELS[sev]}</td>
+                      {OUTBOUND_CHANNELS.filter((ch) => alertChannels.includes(ch)).map((ch) => {
+                        const routing = severityRouting ?? {};
+                        const channels = routing[sev] ?? [];
+                        const checked = !severityRouting || channels.includes(ch);
+                        return (
+                          <td key={ch} className="text-center p-2">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => {
+                                const prev = severityRouting ? { ...severityRouting } : Object.fromEntries(SEVERITIES.map((s) => [s, OUTBOUND_CHANNELS.filter((c) => alertChannels.includes(c)).slice()]));
+                                const list = prev[sev] ?? [];
+                                prev[sev] = checked ? list.filter((c) => c !== ch) : [...list, ch];
+                                setSeverityRouting(prev);
+                              }}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </SectionCard>
 
       {/* Section 6: Appearance */}

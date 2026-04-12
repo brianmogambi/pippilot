@@ -85,6 +85,53 @@ export type Database = {
           },
         ]
       }
+      notification_deliveries: {
+        Row: {
+          id: string
+          alert_id: string
+          user_id: string
+          channel: string
+          status: string
+          skip_reason: string | null
+          error_message: string | null
+          attempt_count: number
+          sent_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          alert_id: string
+          user_id: string
+          channel: string
+          status?: string
+          skip_reason?: string | null
+          error_message?: string | null
+          attempt_count?: number
+          sent_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          alert_id?: string
+          user_id?: string
+          channel?: string
+          status?: string
+          skip_reason?: string | null
+          error_message?: string | null
+          attempt_count?: number
+          sent_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_deliveries_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "alerts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       instruments: {
         Row: {
           base_currency: string
@@ -201,11 +248,14 @@ export type Database = {
           experience_level: string | null
           id: string
           max_daily_loss_pct: number | null
+          notification_email: string | null
           notifications_enabled: boolean | null
           onboarding_completed: boolean | null
           preferred_pairs: string[] | null
           preferred_sessions: string[] | null
           preferred_strategies: string[] | null
+          severity_channel_routing: Json | null
+          telegram_chat_id: string | null
           timezone: string | null
           trading_style: string | null
           updated_at: string
@@ -224,11 +274,14 @@ export type Database = {
           experience_level?: string | null
           id?: string
           max_daily_loss_pct?: number | null
+          notification_email?: string | null
           notifications_enabled?: boolean | null
           onboarding_completed?: boolean | null
           preferred_pairs?: string[] | null
           preferred_sessions?: string[] | null
           preferred_strategies?: string[] | null
+          severity_channel_routing?: Json | null
+          telegram_chat_id?: string | null
           timezone?: string | null
           trading_style?: string | null
           updated_at?: string
@@ -247,11 +300,14 @@ export type Database = {
           experience_level?: string | null
           id?: string
           max_daily_loss_pct?: number | null
+          notification_email?: string | null
           notifications_enabled?: boolean | null
           onboarding_completed?: boolean | null
           preferred_pairs?: string[] | null
           preferred_sessions?: string[] | null
           preferred_strategies?: string[] | null
+          severity_channel_routing?: Json | null
+          telegram_chat_id?: string | null
           timezone?: string | null
           trading_style?: string | null
           updated_at?: string

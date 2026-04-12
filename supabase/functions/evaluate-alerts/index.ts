@@ -402,6 +402,7 @@ Deno.serve(async (req) => {
 
     // ── 7. Persist ───────────────────────────────────────────────
     let created = 0;
+    let insertedIds: string[] = [];
     if (rows.length > 0) {
       const { data: inserted, error: insertErr } = await supabase
         .from("alerts")
@@ -415,6 +416,19 @@ Deno.serve(async (req) => {
         }
       }
       created = inserted?.length ?? 0;
+      insertedIds = (inserted ?? []).map((r: { id: string }) => r.id);
+    }
+
+    // ── 8. Trigger outbound delivery (fire-and-forget) ──────────
+    if (insertedIds.length > 0) {
+      fetch(`${supabaseUrl}/functions/v1/deliver-notifications`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({ alert_ids: insertedIds }),
+      }).catch((e) => console.error("deliver-notifications trigger failed:", e));
     }
 
     await finalizeRun("success", { evaluated, created, dedup_skipped: dedupSkipped });
