@@ -278,32 +278,39 @@ export default function CandlestickChart({
     }
   }, [analysis, marketData, signals, candles]);
 
-  // ── Loading state ─────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────
+  // Always mount the chart container so the createChart effect can
+  // attach to it. Loading / empty states are overlaid on top.
 
-  if (isLoading && candles.length === 0) {
-    return <Skeleton className="h-[400px] lg:h-[500px] w-full rounded-b-lg" />;
-  }
-
-  if (!isLoading && candles.length === 0) {
-    return (
-      <div className="h-[400px] lg:h-[500px] flex flex-col items-center justify-center bg-muted/10 rounded-b-lg">
-        <BarChart3 className="h-10 w-10 text-muted-foreground/20 mb-2" />
-        <p className="text-sm font-medium text-muted-foreground">
-          No candle data available
-        </p>
-        <p className="text-[11px] text-muted-foreground/60 mt-0.5">
-          Data will appear once the market data sync completes
-        </p>
-      </div>
-    );
-  }
+  const showEmpty = !isLoading && candles.length === 0;
+  const showLoading = isLoading && candles.length === 0;
 
   return (
     <div className="relative">
       <div
         ref={containerRef}
-        className="h-[400px] lg:h-[500px] w-full rounded-b-lg overflow-hidden"
+        className={`h-[400px] lg:h-[500px] w-full rounded-b-lg overflow-hidden ${showEmpty || showLoading ? "invisible" : ""}`}
       />
+
+      {/* Loading overlay */}
+      {showLoading && (
+        <div className="absolute inset-0">
+          <Skeleton className="h-full w-full rounded-b-lg" />
+        </div>
+      )}
+
+      {/* Empty state overlay */}
+      {showEmpty && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/10 rounded-b-lg">
+          <BarChart3 className="h-10 w-10 text-muted-foreground/20 mb-2" />
+          <p className="text-sm font-medium text-muted-foreground">
+            No candle data available
+          </p>
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+            Data will appear once the market data sync completes
+          </p>
+        </div>
+      )}
 
       {/* Fetching overlay */}
       {isFetching && candles.length > 0 && (
@@ -314,14 +321,16 @@ export default function CandlestickChart({
       )}
 
       {/* EMA legend */}
-      <div className="absolute top-2 left-2 flex items-center gap-3 text-[10px] font-mono">
-        <span style={{ color: CHART_COLORS.ema20 }}>EMA 20</span>
-        <span style={{ color: CHART_COLORS.ema50 }}>EMA 50</span>
-        <span style={{ color: CHART_COLORS.ema200 }}>EMA 200</span>
-      </div>
+      {!showEmpty && !showLoading && (
+        <div className="absolute top-2 left-2 flex items-center gap-3 text-[10px] font-mono">
+          <span style={{ color: CHART_COLORS.ema20 }}>EMA 20</span>
+          <span style={{ color: CHART_COLORS.ema50 }}>EMA 50</span>
+          <span style={{ color: CHART_COLORS.ema200 }}>EMA 200</span>
+        </div>
+      )}
 
       {/* Active setup label — single source: the active enriched signal */}
-      {setupLabel && (
+      {setupLabel && !showEmpty && !showLoading && (
         <div
           className={`absolute bottom-2 left-2 flex items-center gap-1.5 rounded-md backdrop-blur-sm border px-2 py-1 text-[10px] font-medium ${
             setupLabel.verdict === "no_trade"

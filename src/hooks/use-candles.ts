@@ -68,8 +68,8 @@ export function useCandles(
       if (error) throw error;
       if (!data || data.length === 0) return [];
 
-      // Map rows and reverse to ascending order for chart consumption
-      return (data as unknown as Record<string, unknown>[])
+      // Reverse to ascending order for chart consumption
+      return (data as Record<string, unknown>[])
         .map(rowToCandle)
         .reverse();
     },
@@ -104,7 +104,7 @@ export function useCandlesInRange(
       if (error) throw error;
       if (!data || data.length === 0) return [];
 
-      return (data as unknown as Record<string, unknown>[]).map(rowToCandle);
+      return (data as Record<string, unknown>[]).map(rowToCandle);
     },
     enabled: !!user && !!symbol && !!timeframe && !!from && !!to,
     staleTime: STALE_TIME[timeframe],

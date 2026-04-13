@@ -85,6 +85,116 @@ export type Database = {
           },
         ]
       }
+      generation_runs: {
+        Row: {
+          id: string
+          function_name: string
+          batch_index: number | null
+          pairs_processed: string[]
+          started_at: string
+          finished_at: string | null
+          duration_ms: number | null
+          status: string
+          error_message: string | null
+          candles_fetched: number
+          signals_created: number
+          api_credits_used: number
+        }
+        Insert: {
+          id?: string
+          function_name: string
+          batch_index?: number | null
+          pairs_processed?: string[]
+          started_at?: string
+          finished_at?: string | null
+          duration_ms?: number | null
+          status?: string
+          error_message?: string | null
+          candles_fetched?: number
+          signals_created?: number
+          api_credits_used?: number
+        }
+        Update: {
+          id?: string
+          function_name?: string
+          batch_index?: number | null
+          pairs_processed?: string[]
+          started_at?: string
+          finished_at?: string | null
+          duration_ms?: number | null
+          status?: string
+          error_message?: string | null
+          candles_fetched?: number
+          signals_created?: number
+          api_credits_used?: number
+        }
+        Relationships: []
+      }
+      indicator_snapshots: {
+        Row: {
+          id: string
+          run_id: string
+          symbol: string
+          timeframe: string
+          price: number
+          ema20: number | null
+          ema50: number | null
+          ema200: number | null
+          rsi14: number | null
+          atr14: number | null
+          macd_hist: number | null
+          bb_upper: number | null
+          bb_lower: number | null
+          bb_width: number | null
+          trend: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          run_id: string
+          symbol: string
+          timeframe: string
+          price: number
+          ema20?: number | null
+          ema50?: number | null
+          ema200?: number | null
+          rsi14?: number | null
+          atr14?: number | null
+          macd_hist?: number | null
+          bb_upper?: number | null
+          bb_lower?: number | null
+          bb_width?: number | null
+          trend?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          run_id?: string
+          symbol?: string
+          timeframe?: string
+          price?: number
+          ema20?: number | null
+          ema50?: number | null
+          ema200?: number | null
+          rsi14?: number | null
+          atr14?: number | null
+          macd_hist?: number | null
+          bb_upper?: number | null
+          bb_lower?: number | null
+          bb_width?: number | null
+          trend?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "indicator_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "generation_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_deliveries: {
         Row: {
           id: string
@@ -131,6 +241,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ohlcv_candles: {
+        Row: {
+          symbol: string
+          timeframe: string
+          candle_time: string
+          open: number
+          high: number
+          low: number
+          close: number
+          volume: number | null
+          fetched_at: string
+        }
+        Insert: {
+          symbol: string
+          timeframe: string
+          candle_time: string
+          open: number
+          high: number
+          low: number
+          close: number
+          volume?: number | null
+          fetched_at?: string
+        }
+        Update: {
+          symbol?: string
+          timeframe?: string
+          candle_time?: string
+          open?: number
+          high?: number
+          low?: number
+          close?: number
+          volume?: number | null
+          fetched_at?: string
+        }
+        Relationships: []
       }
       instruments: {
         Row: {

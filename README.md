@@ -12,15 +12,16 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Dashboard** | Account overview, active signals, alerts, market watch, journal snapshot, daily trading tips |
+| **Dashboard** | "Top Trade" hero card surfacing highest-quality signal, quality-sorted active signals, account bar, market watch, collapsible journal & tips |
 | **Market Watch** | Monitor 16 forex instruments with live prices, spread, volatility, multi-timeframe trends, and session data |
-| **Signal Explorer** | Browse algorithmically-generated trade setups with confidence scores, quality grades (A+/A/B/C), and AI-written explanations |
+| **Signal Explorer** | Browse algorithmically-generated trade setups with confidence scores, quality grades (A+/A/B/C), R:R ratios, freshness indicators, and AI-written explanations |
 | **Risk Calculator** | Position sizing with risk %, conservative mode, exposure warnings, and daily loss tracking |
 | **Alerts Center** | Notifications for signal events and market conditions with severity levels (event-aware deduplication) |
 | **Trade Journal** | Log trades with entry/exit, emotions, lessons learned, and performance stats |
 | **Pair Detail** | Deep-dive analysis per pair: live OHLCV chart, key levels, structure, AI reasoning, signal & journal history |
-| **Live Charts** | Real candlestick charts (5m / 15m / 1H / 4H / 1D) with on-chart entry/SL/TP overlays |
-| **Freshness Indicators** | Every data widget labels itself as **Live**, **Cached**, or **Demo** so the user always knows whether they're looking at fresh data, stale cache, or a fallback |
+| **Live Charts** | Real candlestick charts (5m / 15m / 1H / 4H / 1D) with EMA overlays, on-chart entry/SL/TP price lines, and signal markers |
+| **Data Freshness** | Auto-refresh on login, 2-minute polling, server-side cron scheduling, freshness badges (**Live** / **Cached** / **Demo**) across all widgets |
+| **Broker Integration** | Read-only broker account sync (adapter pattern) — view positions, orders, equity snapshots without execution |
 | **Settings** | Profile, preferred pairs/sessions/strategies, risk parameters, notifications |
 | **Admin Review** | Role-based panel for reviewing and tagging AI-generated signals (quality control) |
 
@@ -32,12 +33,13 @@
 | Styling | Tailwind CSS v3 · shadcn/ui (Radix) |
 | Data | TanStack React Query v5 |
 | Routing | React Router v6 |
-| Charts | Recharts (stat widgets) · lightweight-charts (live candlesticks) |
+| Charts | Recharts (stat widgets) · lightweight-charts v5 (live candlesticks) |
 | Forms | React Hook Form · Zod |
 | Backend | Supabase — PostgreSQL with RLS + Edge Functions (Deno runtime) |
 | Market Data | Twelve Data API (live OHLCV, 8 credits/min free tier) |
 | AI | Claude Haiku via Anthropic API (explanation layer only — versioned prompts) |
 | Auth | Email/password with verification |
+| Scheduling | pg_cron + pg_net (server-side Edge Function invocation) |
 | Testing | Vitest (113 tests across pure engine modules) |
 
 ## Architecture
@@ -46,14 +48,15 @@
 Frontend (React SPA)
   ├── Pages (Dashboard, Signals, Watchlist, Journal, Calculator, Alerts, Learn, Settings, Admin)
   ├── Hooks (use-signals, use-alerts, use-journal, use-watchlist, use-account,
-  │          use-market-data, use-pip-value, use-daily-risk, use-candles, use-admin)
+  │          use-market-data, use-pip-value, use-daily-risk, use-candles,
+  │          use-auto-refresh, use-broker, use-admin)
   ├── Contexts (AuthContext — session + profile)
   ├── Lib (pure, vitest-tested)
   │    ├── pip-value          — live-rate pip value computation
   │    ├── risk-engine        — position sizing, daily-loss caps, exposure
   │    ├── alert-engine       — event-aware alert evaluation + deduplication
   │    ├── explanation-service — versioned-prompt AI/template fallback
-  │    ├── data-freshness    — Live/Cached/Demo classification
+  │    ├── data-freshness    — Live/Cached/Demo classification + signal freshness
   │    ├── indicators         — EMA/RSI/ATR/MACD/BB
   │    └── chart-colors       — chart palette
   └── Components (chart, calculator, journal, signals, ui, …)
@@ -62,15 +65,24 @@ Backend (Supabase)
   ├── Tables: profiles, trading_accounts, user_risk_profiles, signals,
   │           pair_analyses, alerts, alert_state_log, trade_journal_entries,
   │           user_watchlist, instruments, market_data_cache, ohlcv_candles,
-  │           generation_runs, user_roles, admin_review_tags
+  │           generation_runs, indicator_snapshots, notification_deliveries,
+  │           user_roles, admin_review_tags,
+  │           broker_connections, synced_accounts, open_positions,
+  │           pending_orders, account_snapshots, sync_logs
   ├── RLS policies on all tables (authenticated read, scoped writes)
   ├── Auth triggers (auto-create profile + account + risk profile on signup)
+  ├── pg_cron schedules (market data every 5m, signals every 2h,
+  │                      alerts every 5m, outcome resolution every hour)
   └── Edge Functions (Deno):
-       ├── fetch-market-data  → pulls quotes from Twelve Data into market_data_cache
-       ├── fetch-candles      → pulls OHLCV bars into ohlcv_candles
-       ├── generate-signals   → TA engine + Claude AI explanations
-       │                       (batched at 2 pairs/invocation, audited via generation_runs)
-       └── evaluate-alerts    → walks open signals, fires entry/SL/TP/invalidation events
+       ├── fetch-market-data    → pulls quotes from Twelve Data into market_data_cache
+       ├── fetch-candles        → pulls OHLCV bars into ohlcv_candles (auto-fetched per pair)
+       ├── generate-signals     → TA engine + Claude AI explanations
+       │                         (batched at 2 pairs/invocation, audited via generation_runs)
+       ├── evaluate-alerts      → walks open signals, fires entry/SL/TP/invalidation events
+       ├── deliver-notifications → sends email + Telegram alerts for triggered events
+       ├── resolve-live-outcomes → closes signals that hit TP/SL in live market data
+       ├── run-backtest          → historical replay with R-multiple metrics
+       └── sync-broker-data     → read-only broker account sync (MT5 adapter stub)
 
 Signal Pipeline (deterministic + AI)
   Twelve Data OHLCV (5m → 1D)
@@ -85,6 +97,16 @@ Signal Pipeline (deterministic + AI)
         per-row status persisted as ai_success/ai_failed/ai_skipped/template_only)
     → Written to signals + pair_analyses tables
     → generation_runs row records ai_calls_attempted/succeeded/failed/skipped
+
+Data Freshness Pipeline
+  Server-side: pg_cron triggers Edge Functions on schedule
+    → fetch-market-data every 5 min
+    → generate-signals every 2 hours (8 staggered batches)
+    → evaluate-alerts every 5 min
+    → resolve-live-outcomes every hour
+  Client-side: auto-refresh on login (stale detection) + React Query polling
+    → signals poll every 2 min, market data every 1 min, alerts every 1 min
+    → candles auto-fetch on pair detail page visit
 ```
 
 ## Core Principles
@@ -117,42 +139,53 @@ src/
 │   ├── risk-engine.ts      — position sizing, daily-loss caps
 │   ├── alert-engine.ts     — event-aware alert evaluation
 │   ├── explanation-service.ts — versioned-prompt AI/template fallback
-│   ├── data-freshness.ts   — Live/Cached/Demo classification
+│   ├── data-freshness.ts   — Live/Cached/Demo classification + signal freshness
 │   ├── indicators.ts       — EMA/RSI/ATR/MACD/BB
 │   ├── chart-colors.ts     — chart palette
+│   ├── broker/types.ts     — frontend broker type definitions
 │   └── __tests__/          — vitest suites (113 tests)
 ├── pages/            # One file per route
 ├── types/            # Trading type definitions
-└── integrations/     # Supabase client + types (auto-generated)
+└── integrations/     # Supabase client + types
 
 supabase/
+├── config.toml               # Function config (verify_jwt settings)
 ├── functions/
-│   ├── _shared/                # Deno mirrors of pure modules (signal-engine,
-│   │                           #   risk-engine, alert-engine, explanation-service,
-│   │                           #   pip-value, indicators)
-│   ├── fetch-market-data/      # Edge Function — Twelve Data quotes
-│   ├── fetch-candles/          # Edge Function — Twelve Data OHLCV bars
-│   ├── generate-signals/       # Edge Function — signal engine + AI explanations
-│   └── evaluate-alerts/        # Edge Function — alert event evaluation
-└── migrations/                 # SQL migrations (tables, RLS, FKs, indexes)
+│   ├── _shared/              # Deno mirrors of pure modules + broker adapters
+│   │   └── broker/           # Adapter pattern (types, factory, MT5 adapter,
+│   │                         #   sync-service, credential-vault)
+│   ├── fetch-market-data/    # Edge Function — Twelve Data quotes
+│   ├── fetch-candles/        # Edge Function — Twelve Data OHLCV bars
+│   ├── generate-signals/     # Edge Function — signal engine + AI explanations
+│   ├── evaluate-alerts/      # Edge Function — alert event evaluation
+│   ├── deliver-notifications/ # Edge Function — email + Telegram delivery
+│   ├── resolve-live-outcomes/ # Edge Function — close signals at TP/SL
+│   ├── run-backtest/         # Edge Function — historical replay
+│   └── sync-broker-data/    # Edge Function — read-only broker sync
+└── migrations/               # SQL migrations (tables, RLS, FKs, indexes, cron)
 ```
 
 ## What's Implemented
 
 - ✅ Full auth flow (signup, login, email verification, password reset, onboarding)
-- ✅ Dashboard with account stats, signals, alerts, market watch, journal
+- ✅ Dashboard with "Top Trade" hero card, quality-sorted signals, account bar, market watch
 - ✅ **Live market data** for 16 instruments via Twelve Data Edge Function
 - ✅ **Live pip-value computation** from real exchange rates (JPY, USD-quote, USD-base, crosses, XAU)
 - ✅ **Deterministic signal engine** — indicators, 5 setup patterns, confluence scoring, quality grades
-- ✅ **Live candlestick charts** (5m / 15m / 1H / 4H / 1D) with on-chart entry/SL/TP overlays
+- ✅ **Live candlestick charts** (5m / 15m / 1H / 4H / 1D) with EMA overlays, on-chart entry/SL/TP price lines
 - ✅ **Risk engine v2** — pure module, daily loss caps, exposure warnings, vitest-covered
 - ✅ **Alert engine v2** — event-aware deduplication via `alert_state_log`, vitest-covered
-- ✅ **Explanation hardening** — versioned prompts, AI/template fallback metadata persisted
-  per row, per-run AI counters on `generation_runs`
-- ✅ **Frontend real-data conversion** — Live/Cached/Demo badges across Dashboard,
-  Watchlist, PairDetail, SignalDetail; silent fallbacks eliminated
-- ✅ **Daily risk tracker** on dashboard, summed from today's open journal entries
-- ✅ Signal explorer with 6 filters, AI-written beginner/expert explanations, reasons for/against
+- ✅ **Explanation hardening** — versioned prompts, AI/template fallback metadata persisted per row, per-run AI counters
+- ✅ **Frontend real-data conversion** — Live/Cached/Demo badges across Dashboard, Watchlist, PairDetail, SignalDetail
+- ✅ **Backtest engine** — deterministic historical replay with R-multiple metrics
+- ✅ **Signal analytics** — equity curve, confidence calibration, live outcome resolver
+- ✅ **Automated notifications** — email + Telegram delivery for triggered alerts
+- ✅ **Data freshness pipeline** — server-side pg_cron scheduling, client-side auto-refresh + polling, freshness badges
+- ✅ **Dashboard redesign** — Top Trade hero card, quality-sorted signals, collapsible sections
+- ✅ **Read-only broker integration** — adapter pattern, 6 DB tables, sync service, credential encryption (MT5 stub)
+- ✅ **Chart rendering fix** — always-mounted chart container prevents lifecycle race condition
+- ✅ Daily risk tracker on dashboard, summed from today's open journal entries
+- ✅ Signal explorer with 6 filters, R:R column, quality badges, freshness indicators
 - ✅ Risk calculator with conservative mode and exposure warnings
 - ✅ Trade journal with CRUD, stats, and filtering
 - ✅ Learn hub (7 sections) with glossary and FAQ search
@@ -177,14 +210,19 @@ supabase/
 | 9 | Frontend real-data conversion (Live/Cached/Demo badges) | ✅ Done |
 | 10 | Backtest + replay foundation (deterministic historical replay, R-multiple metrics) — see [BACKTEST_ENGINE.md](BACKTEST_ENGINE.md) | ✅ Done |
 | 11 | Signal analytics & review (equity curve, confidence calibration, no-trade quality, live outcome resolver) — see [SIGNAL_ANALYTICS.md](SIGNAL_ANALYTICS.md) | ✅ Done |
+| 12 | Automated outbound alert delivery (email + Telegram) | ✅ Done |
+| 14 | Read-only broker integration (adapter pattern, sync service, credential vault) — see [BROKER_INTEGRATION_READONLY.md](docs/BROKER_INTEGRATION_READONLY.md) | ✅ Done |
+| 15 | Data freshness pipeline (pg_cron scheduling, auto-refresh, polling, freshness indicators) | ✅ Done |
+| 16 | Dashboard redesign (Top Trade hero, quality sorting, compact layout) | ✅ Done |
+| 17 | Chart fix (always-mount container, Supabase types for candle tables, JWT config) | ✅ Done |
 
 ## Future Roadmap
 
 | Phase | Focus |
 |-------|-------|
-| **Phase 12** | Analytics surface (user-facing dashboards backed by `useLiveSignalAnalytics`) |
-| **Phase 13** | Confidence recalibration (only if Phase 12 calibration data justifies it) |
-| **Phase 14** | Optional broker integration (position tracking, not auto-trading) |
+| **Phase 18** | Analytics surface (user-facing dashboards backed by `useLiveSignalAnalytics`) |
+| **Phase 19** | Confidence recalibration (only if analytics calibration data justifies it) |
+| **Phase 20** | Broker execution layer (optional, requires full security audit) |
 
 ## Documentation
 
@@ -198,7 +236,9 @@ Full documentation suite available in `/docs/`:
 - `RISK_ENGINE_SPEC.md` — Position sizing and exposure formulas
 - `ALERT_ENGINE_SPEC.md` — Alert types, triggers, delivery
 - `UI_ARCHITECTURE.md` — Frontend structure and data flow
-- `FUTURE_ROADMAP.md` — Phases 3–5
+- `BROKER_INTEGRATION_READONLY.md` — Broker adapter architecture & security model
+- `BACKTEST_ENGINE.md` — Historical replay engine design
+- `SIGNAL_ANALYTICS.md` — Signal performance analytics
 
 ## Deployment
 
@@ -206,19 +246,40 @@ Environment variables required:
 - `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` — in `.env` for the frontend
 
 Supabase Edge Function secrets:
-- `TWELVE_DATA_API_KEY` — for market data fetching
+- `TWELVE_DATA_API_KEY` — for market data and candle fetching
 - `ANTHROPIC_API_KEY` — for AI explanations (optional; falls back to templates)
+- `BROKER_CREDENTIAL_KEY` — for broker credential encryption (optional, only if using broker sync)
 
-Deploy Edge Functions:
+Deploy Edge Functions (all require `--no-verify-jwt` for frontend invocation):
 ```bash
-supabase functions deploy fetch-market-data
-supabase functions deploy generate-signals
+supabase functions deploy fetch-market-data --no-verify-jwt
+supabase functions deploy fetch-candles --no-verify-jwt
+supabase functions deploy generate-signals --no-verify-jwt
+supabase functions deploy evaluate-alerts --no-verify-jwt
+supabase functions deploy deliver-notifications --no-verify-jwt
+supabase functions deploy resolve-live-outcomes --no-verify-jwt
+supabase functions deploy run-backtest --no-verify-jwt
+supabase functions deploy sync-broker-data --no-verify-jwt
+```
+
+Apply database migrations:
+```bash
+supabase db push
 ```
 
 Invoke signal generation (batched, 2 pairs per invocation, batches 0–7):
 ```bash
 curl -X POST "https://<project>.supabase.co/functions/v1/generate-signals?batch=0" \
-  -H "Authorization: Bearer <anon-key>"
+  -H "Authorization: Bearer <service-role-key>" \
+  -H "Content-Type: application/json"
+```
+
+Manually fetch candles for a pair:
+```bash
+curl -X POST "https://<project>.supabase.co/functions/v1/fetch-candles" \
+  -H "Authorization: Bearer <service-role-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"EUR/USD","timeframe":"1h"}'
 ```
 
 ## License

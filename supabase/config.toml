@@ -1,1 +1,30 @@
 project_id = "ltpjieefgjleeuqjzqnj"
+
+# Edge functions invoked from the frontend via supabase.functions.invoke()
+# use the user's anon JWT. Supabase gateway rejects these unless
+# verify_jwt is disabled. Each function creates its own service-role
+# client internally for DB writes, so gateway-level JWT check is unnecessary.
+
+[functions.fetch-candles]
+verify_jwt = false
+
+[functions.fetch-market-data]
+verify_jwt = false
+
+[functions.generate-signals]
+verify_jwt = false
+
+[functions.sync-broker-data]
+verify_jwt = false
+
+[functions.evaluate-alerts]
+verify_jwt = false
+
+[functions.deliver-notifications]
+verify_jwt = false
+
+[functions.resolve-live-outcomes]
+verify_jwt = false
+
+[functions.run-backtest]
+verify_jwt = false
