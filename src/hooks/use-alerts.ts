@@ -37,6 +37,8 @@ export function useAlerts() {
       return data as Alert[];
     },
     enabled: !!user,
+    staleTime: 30_000,
+    refetchInterval: 60_000, // poll every minute for new alerts
   });
 }
 
@@ -55,6 +57,8 @@ export function useDashboardAlerts(limit = 5) {
       return (data ?? []) as Alert[];
     },
     enabled: !!user,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -72,6 +76,8 @@ export function useUnreadAlertCount() {
       return count ?? 0;
     },
     enabled: !!user,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -110,6 +116,8 @@ export function useEnrichedAlerts(opts?: { kinds?: AlertEventKind[] }) {
       return (data ?? []) as unknown as EnrichedAlert[];
     },
     enabled: !!user,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -128,6 +136,8 @@ export function useDashboardAlertsEnriched(limit = 5) {
       return (data ?? []) as unknown as EnrichedAlert[];
     },
     enabled: !!user,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 

@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, DollarSign, AlertTriangle, BookOpen, Activity, Lightbulb, Eye, BarChart3, Clock, Circle, X } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, AlertTriangle, BookOpen, Activity, Lightbulb, BarChart3, Clock, Circle, X, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTradingAccount, useRiskProfile } from "@/hooks/use-account";
-import { useActiveSignals } from "@/hooks/use-signals";
+import { useEnrichedActiveSignals, useSignalFreshness } from "@/hooks/use-signals";
 import { useDashboardAlerts } from "@/hooks/use-alerts";
 import { useDashboardJournal, useDashboardJournalStats } from "@/hooks/use-journal";
 import { useDashboardWatchlist } from "@/hooks/use-watchlist";
 import { useMarketSummary, useAllMarketData } from "@/hooks/use-market-data";
 import { useDailyRiskUsed } from "@/hooks/use-daily-risk";
-import StatCard from "@/components/ui/stat-card";
 import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
 import { freshnessOf, type Freshness } from "@/lib/data-freshness";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
+import type { EnrichedSignal } from "@/types/trading";
 
 const beginnerTips = [
   "A good trade setup needs structure, confirmation, and acceptable risk.",
@@ -25,49 +25,168 @@ const beginnerTips = [
   "The best trade is sometimes no trade at all — patience pays.",
 ];
 
-const SectionHeader = ({ title, linkTo, linkText = "View all →" }: { title: string; linkTo: string; linkText?: string }) => (
+// ── Top Trade Hero Card ────────────────────────────────────────
+
+function TopTradeCard({ signal }: { signal: EnrichedSignal }) {
+  const isLong = signal.direction === "long";
+  const quality = signal.analysis?.setupQuality ?? null;
+  const rr = signal.riskReward;
+
+  return (
+    <Link
+      to={`/signals/${signal.id}`}
+      className="block rounded-lg border-2 border-primary/40 bg-gradient-to-br from-primary/5 via-card to-card p-4 hover:border-primary/60 transition-all"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Zap className="h-4 w-4 text-primary" />
+        <span className="text-xs font-semibold text-primary uppercase tracking-wide">Top Trade Idea</span>
+        {quality && (
+          <StatusBadge variant={quality === "A+" || quality === "A" ? "bullish" : "neutral"}>
+            {quality}
+          </StatusBadge>
+        )}
+        <FreshnessBadge
+          freshness={signal.confidence >= 70 ? "live" : "cached"}
+          title={`${signal.confidence}% confidence`}
+        />
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-bold text-foreground">{signal.pair}</span>
+          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">{signal.timeframe}</span>
+          <span className={`flex items-center gap-1 text-sm font-semibold ${isLong ? "text-bullish" : "text-bearish"}`}>
+            {isLong ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+            {isLong ? "Long" : "Short"}
+          </span>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {signal.setup_type}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3 text-center">
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-0.5">Entry</p>
+          <p className="text-sm font-mono font-semibold text-foreground">{signal.entry_price}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-0.5">Stop Loss</p>
+          <p className="text-sm font-mono font-semibold text-bearish">{signal.stop_loss}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-0.5">TP1</p>
+          <p className="text-sm font-mono font-semibold text-bullish">{signal.take_profit_1}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-0.5">R:R</p>
+          <p className="text-sm font-mono font-semibold text-primary">{rr.toFixed(2)}R</p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-20 bg-muted rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full ${signal.confidence >= 70 ? "bg-bullish" : signal.confidence >= 50 ? "bg-warning" : "bg-bearish"}`}
+              style={{ width: `${signal.confidence}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground">{signal.confidence}% confidence</span>
+        </div>
+        <span className="text-xs text-primary font-medium">View details →</span>
+      </div>
+    </Link>
+  );
+}
+
+// ── Compact Account Bar ────────────────────────────────────────
+
+function AccountBar({
+  balance, equity, riskUsed, riskRemaining, maxDailyRisk,
+}: {
+  balance: number; equity: number; riskUsed: number; riskRemaining: number; maxDailyRisk: number;
+}) {
+  const dailyPnL = equity - balance;
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-2.5 text-sm overflow-x-auto">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-muted-foreground">Bal</span>
+        <span className="font-semibold text-foreground">${balance.toLocaleString()}</span>
+      </div>
+      <div className="h-4 w-px bg-border shrink-0" />
+      <div className="flex items-center gap-1.5 shrink-0">
+        <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-muted-foreground">P/L</span>
+        <span className={`font-semibold ${dailyPnL >= 0 ? "text-bullish" : "text-bearish"}`}>
+          {dailyPnL >= 0 ? "+" : ""}${dailyPnL.toLocaleString()}
+        </span>
+      </div>
+      <div className="h-4 w-px bg-border shrink-0" />
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Shield className={`h-3.5 w-3.5 ${riskRemaining <= 1 ? "text-bearish" : "text-muted-foreground"}`} />
+        <span className="text-muted-foreground">Risk</span>
+        <span className={`font-semibold ${riskRemaining <= 1 ? "text-bearish" : riskRemaining <= 2 ? "text-warning" : "text-foreground"}`}>
+          {riskUsed}%
+        </span>
+        <span className="text-muted-foreground text-xs">/ {maxDailyRisk}%</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Section Header ─────────────────────────────────────────────
+
+const SectionHeader = ({ title, linkTo, linkText = "View all →", extra }: {
+  title: string; linkTo: string; linkText?: string; extra?: React.ReactNode;
+}) => (
   <div className="flex items-center justify-between">
-    <h2 className="font-semibold text-foreground">{title}</h2>
+    <div className="flex items-center gap-2">
+      <h2 className="font-semibold text-foreground">{title}</h2>
+      {extra}
+    </div>
     <Link to={linkTo} className="text-xs text-primary hover:underline">{linkText}</Link>
   </div>
 );
+
+// ── Main Dashboard ─────────────────────────────────────────────
 
 const Dashboard = () => {
   const { user } = useAuth();
   const { data: account, isLoading: loadingAccount } = useTradingAccount();
   const { data: riskProfile } = useRiskProfile();
-  const { data: signals = [], isLoading: loadingSignals } = useActiveSignals(6);
+  const { enriched: signals, isLoading: loadingSignals } = useEnrichedActiveSignals(8);
   const { data: alerts = [] } = useDashboardAlerts(5);
   const { data: journalEntries = [] } = useDashboardJournal(3);
   const { data: journalStats } = useDashboardJournalStats();
   const { data: watchlist = [] } = useDashboardWatchlist(6);
   const marketSummary = useMarketSummary();
   const { data: marketDataMap } = useAllMarketData();
+  const { freshness: signalFreshness, ageLabel: signalAge } = useSignalFreshness();
+  const { riskUsedPct } = useDailyRiskUsed();
   const [tipDismissed, setTipDismissed] = useState(false);
+  const [journalExpanded, setJournalExpanded] = useState(false);
 
   const isLoading = loadingAccount || loadingSignals;
 
   const hasAccount = account && Number(account.balance) > 0;
   const balance = Number(account?.balance ?? 0);
   const equity = Number(account?.equity ?? 0);
-  const dailyPnL = equity - balance;
-  const hasRiskProfile = riskProfile?.max_daily_loss_pct != null;
   const maxDailyRisk = riskProfile?.max_daily_loss_pct ?? 5;
-  const { riskUsedPct } = useDailyRiskUsed();
   const riskUsed = Math.round(riskUsedPct * 10) / 10;
   const riskRemaining = Math.max(0, Number(maxDailyRisk) - riskUsed);
   const todayTip = beginnerTips[new Date().getDate() % beginnerTips.length];
 
+  const topTrade = signals.length > 0 ? signals[0] : null;
+  const remainingSignals = signals.slice(1);
+
   const marketLookup = Object.fromEntries(marketSummary.map((m) => [m.pair, m]));
-  // Phase 9: no silent fallback. The empty-state branch below handles
-  // the no-watchlist case explicitly.
   const watchPairs = watchlist.map((w) => ({
     ...(marketLookup[w.pair] ?? {}),
     pair: w.pair,
   }));
 
-  // Worst freshness across visible watchlist rows — drives the
-  // "Market Watch" header pill.
   const watchFreshnesses: Freshness[] = watchPairs.map((wp) =>
     freshnessOf(marketDataMap?.[wp.pair]?.updatedAt, !!marketDataMap?.[wp.pair]),
   );
@@ -97,146 +216,138 @@ const Dashboard = () => {
 
   if (isLoading) {
     return (
-      <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[88px] rounded-lg" />)}
-        </div>
+      <div className="p-4 md:p-6 lg:p-8 space-y-4 pb-mobile-nav">
+        <Skeleton className="h-11 rounded-lg" />
+        <Skeleton className="h-36 rounded-lg" />
         <div className="grid lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <Skeleton className="h-64 rounded-lg" />
-            <Skeleton className="h-48 rounded-lg" />
-          </div>
-          <div className="space-y-6">
-            <Skeleton className="h-64 rounded-lg" />
-            <Skeleton className="h-48 rounded-lg" />
-          </div>
+          <div className="lg:col-span-2"><Skeleton className="h-64 rounded-lg" /></div>
+          <Skeleton className="h-64 rounded-lg" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
-      {/* 1. Account Overview */}
+    <div className="p-4 md:p-6 lg:p-8 space-y-4 pb-mobile-nav">
+      {/* 1. Compact account bar */}
       {hasAccount ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-          <StatCard label="Balance" value={`$${balance.toLocaleString()}`} icon={Wallet} iconColor="text-primary" />
-          <StatCard
-            label="Equity"
-            value={`$${equity.toLocaleString()}`}
-            icon={DollarSign}
-            iconColor="text-primary"
-            trend={{ value: `${dailyPnL >= 0 ? "+" : ""}$${dailyPnL.toLocaleString()}`, positive: dailyPnL >= 0 }}
-          />
-          <StatCard
-            label="Daily P/L"
-            value={`${dailyPnL >= 0 ? "+" : ""}$${dailyPnL.toLocaleString()}`}
-            icon={BarChart3}
-            iconColor={dailyPnL >= 0 ? "text-bullish" : "text-bearish"}
-            variant={dailyPnL >= 0 ? "success" : "danger"}
-          />
-          <StatCard
-            label="Risk Used Today"
-            value={`${riskUsed}%`}
-            icon={Activity}
-            iconColor="text-bullish"
-            variant="default"
-            trend={{
-              value: hasRiskProfile
-                ? `of ${maxDailyRisk}% max`
-                : `of ${maxDailyRisk}% max (default)`,
-              positive: true,
-            }}
-          />
-          <StatCard
-            label="Risk Remaining"
-            value={`${riskRemaining}%`}
-            icon={Shield}
-            iconColor={riskRemaining <= 1 ? "text-bearish" : "text-warning"}
-            variant={riskRemaining <= 1 ? "danger" : riskRemaining <= 2 ? "warning" : "default"}
-          />
-        </div>
+        <AccountBar
+          balance={balance}
+          equity={equity}
+          riskUsed={riskUsed}
+          riskRemaining={riskRemaining}
+          maxDailyRisk={maxDailyRisk}
+        />
       ) : (
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex items-center gap-3">
-          <Wallet className="h-5 w-5 text-primary shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-foreground">Set up your trading account</p>
-            <p className="text-xs text-muted-foreground">Go to <Link to="/settings" className="text-primary hover:underline">Settings</Link> to configure your account balance and risk parameters.</p>
-          </div>
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 flex items-center gap-3">
+          <Wallet className="h-4 w-4 text-primary shrink-0" />
+          <p className="text-sm text-muted-foreground">
+            <Link to="/settings" className="text-primary hover:underline font-medium">Set up your account</Link> to see balance and risk data.
+          </p>
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* 3. Active Trade Ideas */}
-          <div className="space-y-3">
-            <SectionHeader title="Active Trade Ideas" linkTo="/signals" />
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              {signals.length > 0 ? (
+      {/* 2. Top Trade Hero */}
+      {topTrade ? (
+        <TopTradeCard signal={topTrade} />
+      ) : (
+        <div className="rounded-lg border border-border bg-card p-6 text-center">
+          <TrendingUp className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No active trade ideas right now.</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Signals are generated automatically — check back soon.</p>
+        </div>
+      )}
+
+      {/* 3. Main content grid */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Left: Signals table + Alerts */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* More Trade Ideas */}
+          {remainingSignals.length > 0 && (
+            <div className="space-y-2">
+              <SectionHeader
+                title="More Trade Ideas"
+                linkTo="/signals"
+                extra={
+                  <>
+                    <FreshnessBadge
+                      freshness={signalFreshness}
+                      title={
+                        signalFreshness === "live"
+                          ? `Updated ${signalAge}`
+                          : signalFreshness === "cached"
+                          ? `Stale — ${signalAge}`
+                          : "No signals yet"
+                      }
+                    />
+                    {signalFreshness !== "live" && signalAge !== "No signals yet" && (
+                      <span className="text-[10px] text-muted-foreground">{signalAge}</span>
+                    )}
+                  </>
+                }
+              />
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs text-muted-foreground bg-muted/30">
-                        <th className="text-left p-3 font-medium">Pair</th>
-                        <th className="text-left p-3 font-medium">Dir</th>
-                        <th className="text-left p-3 font-medium hidden sm:table-cell">Setup</th>
-                        <th className="text-right p-3 font-medium">Entry</th>
-                        <th className="text-right p-3 font-medium">SL</th>
-                        <th className="text-right p-3 font-medium hidden sm:table-cell">TP1</th>
-                        <th className="text-right p-3 font-medium">Conf</th>
-                        <th className="text-right p-3 font-medium">Status</th>
+                        <th className="text-left p-2.5 font-medium">Pair</th>
+                        <th className="text-left p-2.5 font-medium">Dir</th>
+                        <th className="text-left p-2.5 font-medium hidden sm:table-cell">Quality</th>
+                        <th className="text-right p-2.5 font-medium">Entry</th>
+                        <th className="text-right p-2.5 font-medium hidden sm:table-cell">R:R</th>
+                        <th className="text-right p-2.5 font-medium">Conf</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {signals.map((s) => (
+                      {remainingSignals.map((s) => (
                         <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="p-3 font-medium text-foreground">
+                          <td className="p-2.5 font-medium text-foreground">
                             <Link to={`/signals/${s.id}`} className="hover:text-primary">{s.pair}</Link>
                           </td>
-                          <td className="p-3">
+                          <td className="p-2.5">
                             <span className={`flex items-center gap-1 text-xs font-medium ${s.direction === "long" ? "text-bullish" : "text-bearish"}`}>
                               {s.direction === "long" ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                               {s.direction === "long" ? "Long" : "Short"}
                             </span>
                           </td>
-                          <td className="p-3 text-muted-foreground text-xs hidden sm:table-cell">{s.setup_type ?? "—"}</td>
-                          <td className="p-3 text-right font-mono text-foreground">{s.entry_price}</td>
-                          <td className="p-3 text-right font-mono text-bearish">{s.stop_loss}</td>
-                          <td className="p-3 text-right font-mono text-bullish hidden sm:table-cell">{s.take_profit_1}</td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="w-12 bg-muted rounded-full h-1.5">
+                          <td className="p-2.5 hidden sm:table-cell">
+                            {s.analysis?.setupQuality ? (
+                              <StatusBadge variant={s.analysis.setupQuality === "A+" || s.analysis.setupQuality === "A" ? "bullish" : s.analysis.setupQuality === "B" ? "neutral" : "bearish"}>
+                                {s.analysis.setupQuality}
+                              </StatusBadge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right font-mono text-foreground">{s.entry_price}</td>
+                          <td className="p-2.5 text-right font-mono text-primary hidden sm:table-cell">{s.riskReward.toFixed(2)}R</td>
+                          <td className="p-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <div className="w-10 bg-muted rounded-full h-1.5">
                                 <div
                                   className={`h-1.5 rounded-full ${s.confidence >= 70 ? "bg-bullish" : s.confidence >= 50 ? "bg-warning" : "bg-bearish"}`}
                                   style={{ width: `${s.confidence}%` }}
                                 />
                               </div>
-                              <span className="text-xs text-muted-foreground w-8 text-right">{s.confidence}%</span>
+                              <span className="text-xs text-muted-foreground w-7 text-right">{s.confidence}%</span>
                             </div>
-                          </td>
-                          <td className="p-3 text-right">
-                            <StatusBadge variant={s.verdict === "no_trade" ? "no_trade" : s.status === "active" ? "active" : "neutral"}>
-                              {s.verdict === "no_trade" ? "no trade" : s.status}
-                            </StatusBadge>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">No active trade ideas. Check back soon.</div>
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* 4. Alerts Feed */}
-          <div className="space-y-3">
+          {/* Alerts */}
+          <div className="space-y-2">
             <SectionHeader title="Alerts" linkTo="/alerts" />
             <div className="rounded-lg border border-border bg-card divide-y divide-border">
               {alerts.length > 0 ? alerts.map((alert) => (
-                <div key={alert.id} className="flex items-start gap-3 p-3">
+                <div key={alert.id} className="flex items-start gap-3 p-2.5">
                   <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${severityIcon(alert.severity)}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -255,16 +366,15 @@ const Dashboard = () => {
                   </span>
                 </div>
               )) : (
-                <div className="p-8 text-center text-sm text-muted-foreground">All clear — no alerts.</div>
+                <div className="p-6 text-center text-sm text-muted-foreground">All clear — no alerts.</div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* 2. Market Watch Summary */}
-          <div className="space-y-3">
+        {/* Right: Market Watch */}
+        <div className="space-y-4">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h2 className="font-semibold text-foreground">Market Watch</h2>
@@ -297,7 +407,7 @@ const Dashboard = () => {
                 const volatility = getVolatility(changePct);
                 const hasSignal = signalPairs.has(wp.pair);
                 return (
-                  <div key={wp.pair} className="p-3 space-y-1.5">
+                  <div key={wp.pair} className="p-2.5 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-foreground">{wp.pair}</span>
                       <div className="flex items-center gap-2">
@@ -306,7 +416,7 @@ const Dashboard = () => {
                             freshness={rowFreshness}
                             title={
                               rowFreshness === "fallback"
-                                ? "No live data — Edge Function hasn't returned this pair yet"
+                                ? "No live data yet"
                                 : liveRow?.updatedAt
                                 ? `Updated ${formatDistanceToNow(new Date(liveRow.updatedAt), { addSuffix: true })}`
                                 : "Cached"
@@ -336,68 +446,82 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* 5. Journal Snapshot */}
-          <div className="space-y-3">
-            <SectionHeader title="Journal Snapshot" linkTo="/journal" />
-            {journalStats && (
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-lg border border-border bg-card p-2.5 text-center">
-                  <p className="text-lg font-bold text-foreground">{journalStats.total}</p>
-                  <span className="text-[10px] text-muted-foreground">Total</span>
+          {/* Collapsible Journal + Tip */}
+          <div className="space-y-2">
+            <button
+              onClick={() => setJournalExpanded(!journalExpanded)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <h2 className="font-semibold text-foreground">Journal & Tips</h2>
+              {journalExpanded
+                ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              }
+            </button>
+
+            {journalExpanded && (
+              <div className="space-y-3">
+                {/* Journal stats */}
+                {journalStats && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-lg border border-border bg-card p-2 text-center">
+                      <p className="text-base font-bold text-foreground">{journalStats.total}</p>
+                      <span className="text-[10px] text-muted-foreground">Total</span>
+                    </div>
+                    <div className="rounded-lg border border-border bg-card p-2 text-center">
+                      <p className="text-base font-bold text-foreground">{journalStats.winRate}%</p>
+                      <span className="text-[10px] text-muted-foreground">Win Rate</span>
+                    </div>
+                    <div className="rounded-lg border border-border bg-card p-2 text-center">
+                      <p className={`text-base font-bold ${journalStats.avgPL >= 0 ? "text-bullish" : "text-bearish"}`}>
+                        {journalStats.avgPL >= 0 ? "+" : ""}{journalStats.avgPL}p
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">Avg P/L</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent journal entries */}
+                <div className="rounded-lg border border-border bg-card divide-y divide-border">
+                  {journalEntries.length > 0 ? journalEntries.map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between p-2.5">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm font-medium text-foreground">{entry.pair}</span>
+                        <StatusBadge variant={entry.direction === "long" ? "bullish" : "bearish"}>{entry.direction}</StatusBadge>
+                      </div>
+                      <span className={`text-sm font-mono font-semibold ${(Number(entry.result_pips) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
+                        {entry.result_pips != null ? `${Number(entry.result_pips) >= 0 ? "+" : ""}${entry.result_pips}p` : "open"}
+                      </span>
+                    </div>
+                  )) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      <Link to="/journal" className="text-primary hover:underline">Start logging trades</Link> to track performance.
+                    </div>
+                  )}
                 </div>
-                <div className="rounded-lg border border-border bg-card p-2.5 text-center">
-                  <p className="text-lg font-bold text-foreground">{journalStats.winRate}%</p>
-                  <span className="text-[10px] text-muted-foreground">Win Rate</span>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-2.5 text-center">
-                  <p className={`text-lg font-bold ${journalStats.avgPL >= 0 ? "text-bullish" : "text-bearish"}`}>
-                    {journalStats.avgPL >= 0 ? "+" : ""}{journalStats.avgPL}p
-                  </p>
-                  <span className="text-[10px] text-muted-foreground">Avg P/L</span>
-                </div>
+
+                {/* Tip */}
+                {!tipDismissed && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 relative">
+                    <button onClick={() => setTipDismissed(true)} className="absolute top-2 right-2 p-1 rounded hover:bg-primary/10 transition-colors">
+                      <X className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                    <div className="flex items-start gap-2">
+                      <Lightbulb className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
+                      <p className="text-xs text-muted-foreground leading-relaxed pr-4">{todayTip}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            <div className="rounded-lg border border-border bg-card divide-y divide-border">
-              {journalEntries.length > 0 ? journalEntries.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between p-3">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-sm font-medium text-foreground">{entry.pair}</span>
-                    <StatusBadge variant={entry.direction === "long" ? "bullish" : "bearish"}>{entry.direction}</StatusBadge>
-                  </div>
-                  <span className={`text-sm font-mono font-semibold ${(Number(entry.result_pips) ?? 0) >= 0 ? "text-bullish" : "text-bearish"}`}>
-                    {entry.result_pips != null ? `${Number(entry.result_pips) >= 0 ? "+" : ""}${entry.result_pips}p` : "open"}
-                  </span>
-                </div>
-              )) : (
-                <div className="p-6 text-center text-sm text-muted-foreground">Start logging trades to track your performance.</div>
-              )}
-            </div>
           </div>
-
-          {/* 6. Beginner Insight Card */}
-          {!tipDismissed && (
-            <div className="rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-4 relative">
-              <button onClick={() => setTipDismissed(true)} className="absolute top-2 right-2 p-1 rounded hover:bg-primary/10 transition-colors">
-                <X className="h-3 w-3 text-muted-foreground" />
-              </button>
-              <div className="flex items-start gap-3">
-                <div className="rounded-full bg-primary/15 p-2 shrink-0">
-                  <Lightbulb className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground mb-1">Trading Tip</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{todayTip}</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Disclaimer — subtle footer */}
+      {/* Disclaimer */}
       <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed">
-        ⚠️ PipPilot AI provides AI-assisted analysis only — not financial advice. Trading carries significant risk.
+        PipPilot AI provides AI-assisted analysis only — not financial advice. Trading carries significant risk.
       </p>
     </div>
   );

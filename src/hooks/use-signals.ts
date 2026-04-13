@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMemo } from "react";
 import type { Signal, EnrichedSignal, PairAnalysisRow } from "@/types/trading";
 import { rowToAnalysis } from "./_shared/row-to-analysis";
+import { signalFreshnessOf, signalAgeLabel, type Freshness } from "@/lib/data-freshness";
 
 /**
  * Fallback risk/reward calculation for legacy rows that pre-date the
@@ -81,6 +82,8 @@ export function useSignals() {
       return data as Signal[];
     },
     enabled: !!user,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000, // poll every 2 minutes
   });
 
   const enriched: EnrichedSignal[] = useMemo(() => {
@@ -114,6 +117,8 @@ export function useActiveSignals(limit = 6) {
       return (data ?? []) as Signal[];
     },
     enabled: !!user,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
   });
 }
 
@@ -153,9 +158,83 @@ export function useSignalsByPair(pair: string) {
       });
     },
     enabled: !!user && !!pair,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
   });
 }
 
 export function getQualityFromEnrichedSignal(signal: EnrichedSignal): string | null {
   return signal.analysis?.setupQuality ?? null;
+}
+
+/** Quality rank for sorting: A+ = 0, A = 1, B = 2, C = 3, unknown = 4. */
+function qualityRank(q: string | null | undefined): number {
+  if (q === "A+") return 0;
+  if (q === "A") return 1;
+  if (q === "B") return 2;
+  if (q === "C") return 3;
+  return 4;
+}
+
+/**
+ * Active signals enriched with analysis data, sorted by quality (A+ first)
+ * then by confidence descending. Used by the dashboard to surface the best
+ * trade ideas at the top.
+ */
+export function useEnrichedActiveSignals(limit = 10) {
+  const { user } = useAuth();
+  const { data: analyses } = usePairAnalyses();
+
+  const query = useQuery({
+    queryKey: ["signals-active-enriched", limit],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("signals")
+        .select("*")
+        .eq("status", "active")
+        .eq("verdict", "trade")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      return (data ?? []) as Signal[];
+    },
+    enabled: !!user,
+    staleTime: 60_000,
+    refetchInterval: 2 * 60_000,
+  });
+
+  const enriched: EnrichedSignal[] = useMemo(() => {
+    if (!query.data) return [];
+    return query.data
+      .map((s) => {
+        const dbAnalysis = analyses?.[s.pair];
+        const analysis = dbAnalysis ? rowToAnalysis(dbAnalysis) : null;
+        return {
+          ...s,
+          analysis,
+          riskReward: resolveRiskReward(s),
+        };
+      })
+      .sort((a, b) => {
+        const qDiff = qualityRank(a.analysis?.setupQuality) - qualityRank(b.analysis?.setupQuality);
+        if (qDiff !== 0) return qDiff;
+        return b.confidence - a.confidence;
+      });
+  }, [query.data, analyses]);
+
+  return { ...query, enriched };
+}
+
+/** Signal freshness based on the newest signal's created_at. */
+export function useSignalFreshness(): {
+  freshness: Freshness;
+  ageLabel: string;
+  newestCreatedAt: string | null;
+} {
+  const { signals } = useSignals();
+  const newest = signals.length > 0 ? signals[0]?.created_at ?? null : null;
+  return {
+    freshness: signalFreshnessOf(newest, signals.length > 0),
+    ageLabel: signalAgeLabel(newest),
+    newestCreatedAt: newest,
+  };
 }

@@ -75,6 +75,7 @@ export function useAllMarketData() {
     },
     enabled: !!user,
     staleTime: 60_000, // 1 minute — data updates every ~5 min from Edge Function
+    refetchInterval: 60_000, // poll every minute for fresh market prices
   });
 }
 
@@ -122,6 +123,7 @@ export function usePairAnalysis(symbol: string): PairAnalysis | null {
     },
     enabled: !!user && !!symbol,
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   if (!data) return null;

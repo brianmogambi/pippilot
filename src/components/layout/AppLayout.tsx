@@ -2,8 +2,11 @@ import { Outlet } from "react-router-dom";
 import AppSidebar from "./AppSidebar";
 import AppHeader from "./AppHeader";
 import MobileNav from "./MobileNav";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 
 export default function AppLayout() {
+  useAutoRefresh();
+
   return (
     <div className="flex min-h-screen">
       <AppSidebar />

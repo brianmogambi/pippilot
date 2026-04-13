@@ -1,9 +1,9 @@
 import { useState, useMemo } from "react";
-import { useSignals, getQualityFromEnrichedSignal } from "@/hooks/use-signals";
+import { useSignals, getQualityFromEnrichedSignal, useSignalFreshness } from "@/hooks/use-signals";
 import type { EnrichedSignal } from "@/types/trading";
 import SignalCard from "@/components/signals/SignalCard";
 import SignalDetailDrawer from "@/components/signals/SignalDetailDrawer";
-import StatusBadge from "@/components/ui/status-badge";
+import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ export default function Signals() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedSignal, setSelectedSignal] = useState<EnrichedSignal | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { freshness: signalFreshness, ageLabel: signalAge } = useSignalFreshness();
 
   const { enriched, isLoading } = useSignals();
 
@@ -65,7 +66,22 @@ export default function Signals() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Signal Explorer</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-foreground">Signal Explorer</h1>
+            <FreshnessBadge
+              freshness={signalFreshness}
+              title={
+                signalFreshness === "live"
+                  ? `Signals updated ${signalAge}`
+                  : signalFreshness === "cached"
+                  ? `Signals stale — last generated ${signalAge}`
+                  : "No signals generated yet"
+              }
+            />
+            {signalFreshness !== "live" && signalAge !== "No signals yet" && (
+              <span className="text-xs text-muted-foreground">{signalAge}</span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-1">AI-generated trade setups — review, filter, and analyze</p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5">
