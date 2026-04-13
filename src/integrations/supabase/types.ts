@@ -666,6 +666,320 @@ export type Database = {
         ]
       }
     }
+    // ── Phase 14: Broker integration tables ──────────────────────
+      broker_connections: {
+        Row: {
+          id: string
+          user_id: string
+          broker_type: string
+          label: string
+          encrypted_credentials: Json
+          status: string
+          last_error: string | null
+          last_synced_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          broker_type: string
+          label?: string
+          encrypted_credentials?: Json
+          status?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          broker_type?: string
+          label?: string
+          encrypted_credentials?: Json
+          status?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      synced_accounts: {
+        Row: {
+          id: string
+          connection_id: string
+          user_id: string
+          broker_account_id: string
+          account_name: string | null
+          currency: string
+          balance: number
+          equity: number
+          margin_used: number
+          free_margin: number
+          leverage: number | null
+          server_name: string | null
+          is_live: boolean
+          synced_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          connection_id: string
+          user_id: string
+          broker_account_id: string
+          account_name?: string | null
+          currency?: string
+          balance?: number
+          equity?: number
+          margin_used?: number
+          free_margin?: number
+          leverage?: number | null
+          server_name?: string | null
+          is_live?: boolean
+          synced_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          connection_id?: string
+          user_id?: string
+          broker_account_id?: string
+          account_name?: string | null
+          currency?: string
+          balance?: number
+          equity?: number
+          margin_used?: number
+          free_margin?: number
+          leverage?: number | null
+          server_name?: string | null
+          is_live?: boolean
+          synced_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synced_accounts_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "broker_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_positions: {
+        Row: {
+          id: string
+          synced_account_id: string
+          user_id: string
+          broker_ticket_id: string
+          symbol: string
+          direction: string
+          volume: number
+          open_price: number
+          current_price: number | null
+          stop_loss: number | null
+          take_profit: number | null
+          swap: number
+          commission: number
+          unrealized_pnl: number
+          opened_at: string
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          synced_account_id: string
+          user_id: string
+          broker_ticket_id: string
+          symbol: string
+          direction: string
+          volume: number
+          open_price: number
+          current_price?: number | null
+          stop_loss?: number | null
+          take_profit?: number | null
+          swap?: number
+          commission?: number
+          unrealized_pnl?: number
+          opened_at: string
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          synced_account_id?: string
+          user_id?: string
+          broker_ticket_id?: string
+          symbol?: string
+          direction?: string
+          volume?: number
+          open_price?: number
+          current_price?: number | null
+          stop_loss?: number | null
+          take_profit?: number | null
+          swap?: number
+          commission?: number
+          unrealized_pnl?: number
+          opened_at?: string
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_positions_synced_account_id_fkey"
+            columns: ["synced_account_id"]
+            isOneToOne: false
+            referencedRelation: "synced_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pending_orders: {
+        Row: {
+          id: string
+          synced_account_id: string
+          user_id: string
+          broker_ticket_id: string
+          symbol: string
+          order_type: string
+          volume: number
+          price: number
+          stop_loss: number | null
+          take_profit: number | null
+          expiration: string | null
+          placed_at: string
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          synced_account_id: string
+          user_id: string
+          broker_ticket_id: string
+          symbol: string
+          order_type: string
+          volume: number
+          price: number
+          stop_loss?: number | null
+          take_profit?: number | null
+          expiration?: string | null
+          placed_at: string
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          synced_account_id?: string
+          user_id?: string
+          broker_ticket_id?: string
+          symbol?: string
+          order_type?: string
+          volume?: number
+          price?: number
+          stop_loss?: number | null
+          take_profit?: number | null
+          expiration?: string | null
+          placed_at?: string
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_orders_synced_account_id_fkey"
+            columns: ["synced_account_id"]
+            isOneToOne: false
+            referencedRelation: "synced_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      account_snapshots: {
+        Row: {
+          id: string
+          synced_account_id: string
+          user_id: string
+          balance: number
+          equity: number
+          margin_used: number
+          open_positions_count: number
+          unrealized_pnl: number
+          snapshot_at: string
+        }
+        Insert: {
+          id?: string
+          synced_account_id: string
+          user_id: string
+          balance: number
+          equity: number
+          margin_used?: number
+          open_positions_count?: number
+          unrealized_pnl?: number
+          snapshot_at?: string
+        }
+        Update: {
+          id?: string
+          synced_account_id?: string
+          user_id?: string
+          balance?: number
+          equity?: number
+          margin_used?: number
+          open_positions_count?: number
+          unrealized_pnl?: number
+          snapshot_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_snapshots_synced_account_id_fkey"
+            columns: ["synced_account_id"]
+            isOneToOne: false
+            referencedRelation: "synced_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_logs: {
+        Row: {
+          id: string
+          connection_id: string
+          user_id: string
+          sync_type: string
+          status: string
+          items_synced: number
+          duration_ms: number | null
+          error_message: string | null
+          started_at: string
+          finished_at: string | null
+        }
+        Insert: {
+          id?: string
+          connection_id: string
+          user_id: string
+          sync_type: string
+          status: string
+          items_synced?: number
+          duration_ms?: number | null
+          error_message?: string | null
+          started_at?: string
+          finished_at?: string | null
+        }
+        Update: {
+          id?: string
+          connection_id?: string
+          user_id?: string
+          sync_type?: string
+          status?: string
+          items_synced?: number
+          duration_ms?: number | null
+          error_message?: string | null
+          started_at?: string
+          finished_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_logs_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "broker_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     Views: {
       [_ in never]: never
     }

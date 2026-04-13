@@ -80,6 +80,14 @@ export type UserRiskProfile = Tables<"user_risk_profiles">;
 export type Instrument = Tables<"instruments">;
 export type PairAnalysisRow = Tables<"pair_analyses">;
 
+// ── Phase 14: Broker integration DB row aliases ────────────────
+export type BrokerConnection = Tables<"broker_connections">;
+export type SyncedAccount = Tables<"synced_accounts">;
+export type OpenPosition = Tables<"open_positions">;
+export type PendingOrder = Tables<"pending_orders">;
+export type AccountSnapshot = Tables<"account_snapshots">;
+export type SyncLog = Tables<"sync_logs">;
+
 // ── Enriched types (computed fields on top of DB rows) ──────────
 export type EnrichedSignal = Signal & {
   analysis: PairAnalysis | null;
