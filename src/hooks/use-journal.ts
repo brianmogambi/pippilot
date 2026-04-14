@@ -162,6 +162,10 @@ export function useCreateJournalEntry() {
       queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
       queryClient.invalidateQueries({ queryKey: ["journal-stats"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-journal"] });
+      // Phase 18.8: a new journal entry may resolve an unjournaled
+      // closed trade, so the reminder list needs to refetch.
+      queryClient.invalidateQueries({ queryKey: ["executed-trades", "unjournaled"] });
+      queryClient.invalidateQueries({ queryKey: ["trade-analytics"] });
       toast.success("Journal entry added");
     },
     onError: () => toast.error("Failed to add entry"),

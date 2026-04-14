@@ -6,6 +6,7 @@ import AccountModeBadge from "@/components/ui/account-mode-badge";
 import { Button } from "@/components/ui/button";
 import TakeTradeDialog from "@/components/trades/TakeTradeDialog";
 import OpenTradesPanel from "@/components/trades/OpenTradesPanel";
+import UnjournaledTradesReminder from "@/components/trades/UnjournaledTradesReminder";
 import type { AccountMode } from "@/types/trading";
 import StatCard from "@/components/ui/stat-card";
 import EmptyState from "@/components/ui/empty-state";
@@ -95,6 +96,9 @@ export default function Journal() {
         <StatCard label="Best Pair" value={stats.bestPair} icon={TrendingUp} iconColor="text-bullish" />
         <StatCard label="Worst Pair" value={stats.worstPair} icon={TrendingDown} iconColor="text-bearish" />
       </div>
+
+      {/* Phase 18.8: Closed trades that still need a journal entry */}
+      <UnjournaledTradesReminder mode={queryMode} />
 
       {/* Phase 18.4: Open executed trades needing close + review */}
       <OpenTradesPanel mode={queryMode} />

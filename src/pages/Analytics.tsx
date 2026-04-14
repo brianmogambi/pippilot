@@ -14,17 +14,8 @@ import StatCard from "@/components/ui/stat-card";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "@/components/ui/empty-state";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type {
-  AccountMode,
-  TradeResultStatus,
-} from "@/types/trading";
+import { cn } from "@/lib/utils";
+import type { AccountMode } from "@/types/trading";
 import type {
   BreakdownBar,
   TradeAnalyticsFilters,
@@ -41,18 +32,49 @@ import type {
  * useful and never silently merged.
  */
 
-type SourceFilter = "all" | "linked" | "manual";
+/**
+ * Phase 18.8: collapsed all the analytics filter axes into one
+ * 5-option segmented control as the spec requested. Each slice is
+ * mutually exclusive with the others — picking "Demo" implicitly
+ * means "any source", picking "Linked AI" implicitly means "any
+ * mode". Users who want both axes simultaneously can drill in via
+ * the Journal page filters; this page is for the quick scan.
+ */
+type AnalyticsSlice = "all" | "demo" | "real" | "linked" | "manual";
+
+const SLICE_OPTIONS: ReadonlyArray<{
+  value: AnalyticsSlice;
+  label: string;
+}> = [
+  { value: "all", label: "All" },
+  { value: "demo", label: "Demo" },
+  { value: "real", label: "Real" },
+  { value: "linked", label: "Linked to AI" },
+  { value: "manual", label: "Manual" },
+];
+
+function sliceToFilters(slice: AnalyticsSlice): TradeAnalyticsFilters {
+  switch (slice) {
+    case "demo":
+      return { mode: "demo" };
+    case "real":
+      return { mode: "real" };
+    case "linked":
+      return { source: "linked" };
+    case "manual":
+      return { source: "manual" };
+    case "all":
+    default:
+      return {};
+  }
+}
 
 export default function Analytics() {
-  const [mode, setMode] = useState<AccountMode | "all">("all");
-  const [source, setSource] = useState<SourceFilter>("all");
+  const [slice, setSlice] = useState<AnalyticsSlice>("all");
 
   const filters: TradeAnalyticsFilters = useMemo(
-    () => ({
-      mode: mode === "all" ? undefined : mode,
-      source: source === "all" ? undefined : source,
-    }),
-    [mode, source],
+    () => sliceToFilters(slice),
+    [slice],
   );
 
   const { breakdown, isLoading, isError } = useTradeAnalytics(filters);
@@ -61,12 +83,7 @@ export default function Analytics() {
     return (
       <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
         <PageHeader />
-        <FilterBar
-          mode={mode}
-          source={source}
-          onModeChange={setMode}
-          onSourceChange={setSource}
-        />
+        <SliceFilter slice={slice} onChange={setSlice} />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
@@ -95,12 +112,7 @@ export default function Analytics() {
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav max-w-6xl">
       <PageHeader />
-      <FilterBar
-        mode={mode}
-        source={source}
-        onModeChange={setMode}
-        onSourceChange={setSource}
-      />
+      <SliceFilter slice={slice} onChange={setSlice} />
 
       {!hasAnyTrades ? (
         <EmptyState
@@ -222,39 +234,44 @@ function PageHeader() {
   );
 }
 
-function FilterBar({
-  mode,
-  source,
-  onModeChange,
-  onSourceChange,
+/**
+ * Phase 18.8 quick-filter pill bar. Five mutually-exclusive slices,
+ * single click to switch. Matches the shape the spec asked for and
+ * is far less ambiguous than two coupled dropdowns.
+ */
+function SliceFilter({
+  slice,
+  onChange,
 }: {
-  mode: AccountMode | "all";
-  source: SourceFilter;
-  onModeChange: (m: AccountMode | "all") => void;
-  onSourceChange: (s: SourceFilter) => void;
+  slice: AnalyticsSlice;
+  onChange: (s: AnalyticsSlice) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select value={mode} onValueChange={(v) => onModeChange(v as AccountMode | "all")}>
-        <SelectTrigger className="w-[140px] h-8 text-xs">
-          <SelectValue placeholder="Mode" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All modes</SelectItem>
-          <SelectItem value="demo">Demo only</SelectItem>
-          <SelectItem value="real">Real only</SelectItem>
-        </SelectContent>
-      </Select>
-      <Select value={source} onValueChange={(v) => onSourceChange(v as SourceFilter)}>
-        <SelectTrigger className="w-[150px] h-8 text-xs">
-          <SelectValue placeholder="Source" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All sources</SelectItem>
-          <SelectItem value="linked">Linked to AI</SelectItem>
-          <SelectItem value="manual">Manual only</SelectItem>
-        </SelectContent>
-      </Select>
+    <div
+      role="tablist"
+      aria-label="Analytics slice"
+      className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-muted/40 p-1"
+    >
+      {SLICE_OPTIONS.map((opt) => {
+        const active = slice === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              active
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

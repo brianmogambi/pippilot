@@ -18,7 +18,7 @@ import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
 import { freshnessOf, type Freshness } from "@/lib/data-freshness";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
-import type { EnrichedSignal } from "@/types/trading";
+import type { AccountMode, EnrichedSignal } from "@/types/trading";
 
 const beginnerTips = [
   "A good trade setup needs structure, confirmation, and acceptable risk.",
@@ -108,13 +108,21 @@ function TopTradeCard({ signal }: { signal: EnrichedSignal }) {
 // ── Compact Account Bar ────────────────────────────────────────
 
 function AccountBar({
-  balance, equity, riskUsed, riskRemaining, maxDailyRisk,
+  balance, equity, riskUsed, riskRemaining, maxDailyRisk, accountMode,
 }: {
-  balance: number; equity: number; riskUsed: number; riskRemaining: number; maxDailyRisk: number;
+  balance: number;
+  equity: number;
+  riskUsed: number;
+  riskRemaining: number;
+  maxDailyRisk: number;
+  accountMode: AccountMode;
 }) {
   const dailyPnL = equity - balance;
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-2.5 text-sm overflow-x-auto">
+      {/* Phase 18.8: mode badge anchors the bar so the trader always
+          sees at a glance whether they are looking at demo or real. */}
+      <AccountModeBadge mode={accountMode} size="md" className="shrink-0" />
       <div className="flex items-center gap-1.5 shrink-0">
         <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-muted-foreground">Bal</span>
@@ -245,6 +253,7 @@ const Dashboard = () => {
           riskUsed={riskUsed}
           riskRemaining={riskRemaining}
           maxDailyRisk={maxDailyRisk}
+          accountMode={defaultMode}
         />
       ) : (
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 flex items-center gap-3">

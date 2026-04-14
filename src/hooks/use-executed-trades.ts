@@ -84,6 +84,53 @@ export function useOpenExecutedTrades(mode?: AccountMode) {
   });
 }
 
+/**
+ * Phase 18.8: closed trades that have no linked journal entry. Used
+ * by the Journal-page "you have unjournaled trades" reminder so the
+ * trader doesn't lose review value when they close a trade outside
+ * the dialog (e.g. broker-sync auto-close in a future phase) or
+ * intentionally unchecked the journal toggle at close time.
+ *
+ * Implemented as two queries + an in-memory anti-join because
+ * PostgREST has no idiomatic NOT EXISTS. The dataset is the user's
+ * own closed trades, so the join is small.
+ */
+export function useUnjournaledClosedTrades(mode?: AccountMode) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["executed-trades", "unjournaled", user?.id, mode ?? "all"],
+    queryFn: async () => {
+      let tradesQuery = supabase
+        .from("executed_trades")
+        .select("*")
+        .eq("user_id", user!.id)
+        .in("result_status", ["win", "loss", "breakeven"])
+        .order("closed_at", { ascending: false });
+      if (mode) tradesQuery = tradesQuery.eq("account_mode", mode);
+      const { data: trades, error: tradesErr } = await tradesQuery;
+      if (tradesErr) throw tradesErr;
+      if (!trades || trades.length === 0) return [];
+
+      const tradeIds = trades.map((t) => t.id);
+      const { data: journals, error: journalsErr } = await supabase
+        .from("trade_journal_entries")
+        .select("executed_trade_id")
+        .eq("user_id", user!.id)
+        .in("executed_trade_id", tradeIds);
+      if (journalsErr) throw journalsErr;
+
+      const journaledIds = new Set(
+        (journals ?? [])
+          .map((j) => j.executed_trade_id)
+          .filter((id): id is string => !!id),
+      );
+      return (trades as ExecutedTrade[]).filter((t) => !journaledIds.has(t.id));
+    },
+    enabled: !!user,
+  });
+}
+
 /** Phase 18.4: single trade fetch used when editing / closing from a URL. */
 export function useExecutedTrade(id: string | null | undefined) {
   const { user } = useAuth();

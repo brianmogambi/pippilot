@@ -66,6 +66,14 @@ interface CloseTradeReviewDialogProps {
   onOpenChange: (open: boolean) => void;
   trade: ExecutedTrade | null;
   onSuccess?: () => void;
+  /**
+   * Phase 18.8: when true, skip the close mutation and just create a
+   * linked journal entry for an already-closed trade. Used by the
+   * "you have unjournaled trades" reminder so users can backfill
+   * reviews on trades that closed without going through the close
+   * flow (or where they unchecked "Create linked journal entry").
+   */
+  journalOnly?: boolean;
 }
 
 type FormState = {
@@ -107,6 +115,7 @@ export default function CloseTradeReviewDialog({
   onOpenChange,
   trade,
   onSuccess,
+  journalOnly = false,
 }: CloseTradeReviewDialogProps) {
   const closeMutation = useCloseExecutedTrade();
   const createJournal = useCreateJournalEntry();
@@ -118,10 +127,22 @@ export default function CloseTradeReviewDialog({
 
   // Reset form every time the dialog opens for a new trade so residue
   // from a previous trade never leaks into the next close.
+  // Phase 18.8: in journalOnly mode the trade is already closed, so
+  // pre-fill the exit price from the persisted actual_exit_price and
+  // expand the review section by default — there's nothing else to do
+  // in this dialog.
   useEffect(() => {
     if (!open) return;
-    setForm(emptyForm);
-  }, [open, trade?.id]);
+    if (journalOnly && trade?.actual_exit_price != null) {
+      setForm({
+        ...emptyForm,
+        exit_price: String(trade.actual_exit_price),
+        expand_review: true,
+      });
+    } else {
+      setForm(emptyForm);
+    }
+  }, [open, trade?.id, journalOnly, trade?.actual_exit_price]);
 
   // Live P&L preview as the user types the exit price. Intentionally
   // derived from form state + trade props — no mutation, no effects.
@@ -163,20 +184,29 @@ export default function CloseTradeReviewDialog({
     e.preventDefault();
     if (!canSubmit || !pnlPreview) return;
 
-    const closedAt = new Date().toISOString();
+    // Phase 18.8: journalOnly mode reuses the trade's existing
+    // closed_at — we never overwrite it with "now" when backfilling
+    // a journal entry days after the trade was actually closed.
+    const closedAt = journalOnly
+      ? trade.closed_at ?? new Date().toISOString()
+      : new Date().toISOString();
 
-    // 1. Close the executed trade.
-    await closeMutation.mutateAsync({
-      id: trade.id,
-      payload: {
-        actual_exit_price: Number(form.exit_price),
-        closed_at: closedAt,
-        result_status: pnlPreview.resultStatus,
-        pnl: pnlPreview.pnlUsd,
-        pnl_percent: pnlPreview.pnlPercent != null ? pnlPreview.pnlPercent * 100 : null,
-        notes: form.close_notes || trade.notes || null,
-      },
-    });
+    // 1. Close the executed trade. Skipped in journalOnly mode —
+    // the trade was already closed via the close flow earlier and
+    // we are only adding the missing journal entry.
+    if (!journalOnly) {
+      await closeMutation.mutateAsync({
+        id: trade.id,
+        payload: {
+          actual_exit_price: Number(form.exit_price),
+          closed_at: closedAt,
+          result_status: pnlPreview.resultStatus,
+          pnl: pnlPreview.pnlUsd,
+          pnl_percent: pnlPreview.pnlPercent != null ? pnlPreview.pnlPercent * 100 : null,
+          notes: form.close_notes || trade.notes || null,
+        },
+      });
+    }
 
     // 2. Phase 18.5: run the rule engine and persist the analysis.
     // We intentionally compute this BEFORE the optional journal insert
@@ -205,8 +235,10 @@ export default function CloseTradeReviewDialog({
           trade.actual_take_profit != null ? Number(trade.actual_take_profit) : null,
         actualExit: Number(form.exit_price),
         resultStatus: pnlPreview.resultStatus,
-        followedPlan: form.create_journal ? form.followed_plan : null,
-        mistakeTags: form.create_journal ? form.mistake_tags : [],
+        followedPlan:
+          form.create_journal || journalOnly ? form.followed_plan : null,
+        mistakeTags:
+          form.create_journal || journalOnly ? form.mistake_tags : [],
         signalLinked: !!trade.signal_id,
         // Live signal status is fetched server-side in a future
         // background recompute job; the dialog only knows what the
@@ -221,8 +253,10 @@ export default function CloseTradeReviewDialog({
       console.error("Trade analysis failed", e);
     }
 
-    // 3. Optionally create the linked journal entry.
-    if (form.create_journal) {
+    // 3. Optionally create the linked journal entry. journalOnly
+    // mode forces this on — that's the whole reason the dialog
+    // was opened.
+    if (form.create_journal || journalOnly) {
       const journalPayload = {
         executed_trade_id: trade.id,
         account_mode: trade.account_mode as AccountMode,
@@ -275,7 +309,7 @@ export default function CloseTradeReviewDialog({
       <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
-            Close {trade.symbol}
+            {journalOnly ? "Journal" : "Close"} {trade.symbol}
             <span
               className={`inline-flex items-center gap-1 text-xs font-medium ${
                 trade.direction === "long" ? "text-bullish" : "text-bearish"
@@ -292,10 +326,11 @@ export default function CloseTradeReviewDialog({
             )}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            PipPilot will patch the trade with the exit price and
-            {form.create_journal
-              ? " create a linked journal entry pre-filled from the snapshot."
-              : " skip the journal entry."}
+            {journalOnly
+              ? "Backfill a review for this already-closed trade. Ratings, mistake tags and emotion notes flow into the post-trade analysis."
+              : form.create_journal
+              ? "PipPilot will patch the trade with the exit price and create a linked journal entry pre-filled from the snapshot."
+              : "PipPilot will patch the trade with the exit price and skip the journal entry."}
           </DialogDescription>
         </DialogHeader>
 
@@ -333,16 +368,23 @@ export default function CloseTradeReviewDialog({
             </div>
           </div>
 
-          {/* Exit price + live P&L preview */}
+          {/* Exit price + live P&L preview.
+              In journalOnly mode the trade is already closed, so the
+              exit price is locked and the P&L preview becomes a
+              read-only "what happened" recap. */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Exit Price *</Label>
+            <Label className="text-xs">
+              {journalOnly ? "Exit price (closed)" : "Exit Price *"}
+            </Label>
             <Input
               type="number"
               step="any"
-              required
-              autoFocus
+              required={!journalOnly}
+              readOnly={journalOnly}
+              autoFocus={!journalOnly}
               value={form.exit_price}
               onChange={(e) => setForm({ ...form, exit_price: e.target.value })}
+              className={journalOnly ? "bg-muted/60" : undefined}
             />
             {pnlPreview && (
               <div
@@ -388,24 +430,27 @@ export default function CloseTradeReviewDialog({
             )}
           </div>
 
-          {/* Journal toggle */}
-          <label className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3 cursor-pointer">
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                Create linked journal entry
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Auto-prefilled from the planned snapshot. Uncheck to close without journaling.
-              </p>
-            </div>
-            <Checkbox
-              checked={form.create_journal}
-              onCheckedChange={(c) => setForm({ ...form, create_journal: !!c })}
-            />
-          </label>
+          {/* Journal toggle — hidden in journalOnly mode where the
+              whole point of the dialog is to create the journal entry. */}
+          {!journalOnly && (
+            <label className="flex items-center justify-between rounded-lg border border-border bg-muted/40 p-3 cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Create linked journal entry
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Auto-prefilled from the planned snapshot. Uncheck to close without journaling.
+                </p>
+              </div>
+              <Checkbox
+                checked={form.create_journal}
+                onCheckedChange={(c) => setForm({ ...form, create_journal: !!c })}
+              />
+            </label>
+          )}
 
           {/* Review section (collapsible) */}
-          {form.create_journal && (
+          {(form.create_journal || journalOnly) && (
             <>
               <button
                 type="button"
@@ -559,7 +604,11 @@ export default function CloseTradeReviewDialog({
 
           <Button type="submit" className="w-full" disabled={!canSubmit}>
             {isSubmitting
-              ? "Closing..."
+              ? journalOnly
+                ? "Saving..."
+                : "Closing..."
+              : journalOnly
+              ? "Save journal entry"
               : form.create_journal
               ? "Close & Journal"
               : "Close Trade"}
