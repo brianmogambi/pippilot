@@ -660,20 +660,28 @@ export type Database = {
           confidence: number | null
           created_at: string
           direction: string
+          discipline_rating: number | null
+          emotion_after: string | null
+          emotion_before: string | null
           emotional_notes: string | null
           entry_price: number
           executed_trade_id: string | null
+          execution_rating: number | null
           exit_price: number | null
           followed_plan: boolean
           id: string
           lesson_learned: string | null
           lot_size: number | null
+          mistake_tags: string[]
           notes: string | null
           opened_at: string
           pair: string
           result_amount: number | null
           result_pips: number | null
+          screenshot_after: string | null
+          screenshot_before: string | null
           screenshot_url: string | null
+          setup_rating: number | null
           setup_reasoning: string | null
           setup_type: string | null
           status: string
@@ -688,20 +696,28 @@ export type Database = {
           confidence?: number | null
           created_at?: string
           direction: string
+          discipline_rating?: number | null
+          emotion_after?: string | null
+          emotion_before?: string | null
           emotional_notes?: string | null
           entry_price: number
           executed_trade_id?: string | null
+          execution_rating?: number | null
           exit_price?: number | null
           followed_plan?: boolean
           id?: string
           lesson_learned?: string | null
           lot_size?: number | null
+          mistake_tags?: string[]
           notes?: string | null
           opened_at?: string
           pair: string
           result_amount?: number | null
           result_pips?: number | null
+          screenshot_after?: string | null
+          screenshot_before?: string | null
           screenshot_url?: string | null
+          setup_rating?: number | null
           setup_reasoning?: string | null
           setup_type?: string | null
           status?: string
@@ -716,20 +732,28 @@ export type Database = {
           confidence?: number | null
           created_at?: string
           direction?: string
+          discipline_rating?: number | null
+          emotion_after?: string | null
+          emotion_before?: string | null
           emotional_notes?: string | null
           entry_price?: number
           executed_trade_id?: string | null
+          execution_rating?: number | null
           exit_price?: number | null
           followed_plan?: boolean
           id?: string
           lesson_learned?: string | null
           lot_size?: number | null
+          mistake_tags?: string[]
           notes?: string | null
           opened_at?: string
           pair?: string
           result_amount?: number | null
           result_pips?: number | null
+          screenshot_after?: string | null
+          screenshot_before?: string | null
           screenshot_url?: string | null
+          setup_rating?: number | null
           setup_reasoning?: string | null
           setup_type?: string | null
           status?: string

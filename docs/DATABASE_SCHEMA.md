@@ -353,9 +353,17 @@ User's personal trade diary for tracking performance and learning.
 | `setup_type` | text | Yes | — | Pattern traded |
 | `setup_reasoning` | text | Yes | — | Why the trade was taken |
 | `notes` | text | Yes | — | General notes |
-| `emotional_notes` | text | Yes | — | Emotional state notes |
+| `emotional_notes` | text | Yes | — | Emotional state notes (legacy free-form field) |
+| `emotion_before` | text | Yes | — | Structured emotional state before open. Phase 18.4. |
+| `emotion_after` | text | Yes | — | Structured emotional state after close. Phase 18.4. |
 | `lesson_learned` | text | Yes | — | Retrospective learning |
-| `screenshot_url` | text | Yes | — | Chart screenshot URL |
+| `setup_rating` | integer | Yes | — | Self-rating of the setup (1–5). Phase 18.4. |
+| `execution_rating` | integer | Yes | — | Self-rating of the execution (1–5). Phase 18.4. |
+| `discipline_rating` | integer | Yes | — | Self-rating of discipline (1–5). Phase 18.4. |
+| `mistake_tags` | text[] | No | `'{}'` | Tagged execution mistakes (e.g. `late_entry`, `moved_sl`). Phase 18.4. |
+| `screenshot_url` | text | Yes | — | Legacy chart screenshot URL (pre-18.4) |
+| `screenshot_before` | text | Yes | — | Chart screenshot before the trade opened. Phase 18.4. |
+| `screenshot_after` | text | Yes | — | Chart screenshot after the trade closed. Phase 18.4. |
 | `opened_at` | timestamptz | No | `now()` | When trade was opened |
 | `closed_at` | timestamptz | Yes | — | When trade was closed |
 | `executed_trade_id` | uuid | Yes | — | Optional FK to `executed_trades(id)`. Phase 18.1. |
