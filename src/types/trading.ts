@@ -80,6 +80,19 @@ export type UserRiskProfile = Tables<"user_risk_profiles">;
 export type Instrument = Tables<"instruments">;
 export type PairAnalysisRow = Tables<"pair_analyses">;
 
+// ── Phase 1: Signal → Trade → Journal → AI review ───────────────
+// Demo vs real classification. Source of truth lives on
+// trading_accounts.account_mode and is snapshotted onto
+// executed_trades.account_mode at insert time.
+export type AccountMode = "demo" | "real";
+export type ExecutedTrade = Tables<"executed_trades">;
+export type TradeResultStatus =
+  | "open"
+  | "win"
+  | "loss"
+  | "breakeven"
+  | "cancelled";
+
 // ── Phase 14: Broker integration DB row aliases ────────────────
 export type BrokerConnection = Tables<"broker_connections">;
 export type SyncedAccount = Tables<"synced_accounts">;

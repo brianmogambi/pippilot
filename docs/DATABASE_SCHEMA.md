@@ -84,8 +84,11 @@ Stores trading account details (balance, equity, leverage). Auto-created on sign
 | `leverage` | numeric | Yes | — | Account leverage ratio |
 | `broker_name` | text | Yes | — | Broker name |
 | `is_default` | boolean | No | `true` | Whether this is the default account |
+| `account_mode` | text | No | `'demo'` | Demo vs real (`'demo'` \| `'real'`). Phase 1. |
 | `created_at` | timestamptz | No | `now()` | Created timestamp |
 | `updated_at` | timestamptz | No | `now()` | Updated timestamp |
+
+`account_mode` is the source of truth for demo-vs-real separation throughout the app. Rows created before Phase 1 default to `'demo'`.
 
 ### RLS Policies
 - SELECT, INSERT, UPDATE, DELETE: Users can manage own accounts (`user_id = auth.uid()`)
@@ -101,7 +104,8 @@ Stores trading account details (balance, equity, leverage). Auto-created on sign
   "equity": 10250,
   "leverage": 100,
   "broker_name": "IC Markets",
-  "is_default": true
+  "is_default": true,
+  "account_mode": "demo"
 }
 ```
 
@@ -354,8 +358,14 @@ User's personal trade diary for tracking performance and learning.
 | `screenshot_url` | text | Yes | — | Chart screenshot URL |
 | `opened_at` | timestamptz | No | `now()` | When trade was opened |
 | `closed_at` | timestamptz | Yes | — | When trade was closed |
+| `executed_trade_id` | uuid | Yes | — | Optional FK to `executed_trades(id)`. Phase 1. |
 | `created_at` | timestamptz | No | `now()` | Record created |
 | `updated_at` | timestamptz | No | `now()` | Record updated |
+
+Pre-Phase-1 journal rows and manual journal-only entries have `executed_trade_id = null`.
+
+### Relationships
+- `executed_trade_id` → `executed_trades(id)` `on delete set null`
 
 ### RLS Policies
 - SELECT, INSERT, UPDATE, DELETE: Users can manage own entries (`user_id = auth.uid()`)
@@ -386,7 +396,117 @@ User's personal trade diary for tracking performance and learning.
 
 ---
 
-## 9. `user_roles`
+## 9. `executed_trades`
+
+### Purpose
+Dedicated record of a trade the user has actually taken. Each row captures the **actual execution** (entry price, stop, TP, lot size, P&L) alongside a **snapshot of the originating signal** as it existed at the moment the trade was taken. Added in Phase 1 to enable the signal → trade → journal → AI review workflow.
+
+Manual trades are supported by leaving `signal_id = null`.
+
+### Fields
+| Field | Type | Nullable | Default | Description |
+|-------|------|----------|---------|-------------|
+| `id` | uuid | No | `gen_random_uuid()` | Primary key |
+| `user_id` | uuid | No | — | Owner user ID |
+| `account_id` | uuid | No | — | FK → `trading_accounts(id)` |
+| `account_mode` | text | No | — | `'demo'` or `'real'` — snapshotted from the account at insert time |
+| `signal_id` | uuid | Yes | — | FK → `signals(id)`. Null = manual trade. |
+| `symbol` | text | No | — | Traded symbol (e.g. `"EUR/USD"`) |
+| `direction` | text | No | — | `'long'` or `'short'` |
+| `planned_entry_low` | numeric | Yes | — | Planned entry zone low (from signal) |
+| `planned_entry_high` | numeric | Yes | — | Planned entry zone high (from signal) |
+| `planned_stop_loss` | numeric | Yes | — | Planned SL (from signal) |
+| `planned_take_profit_1` | numeric | Yes | — | Planned TP1 (from signal) |
+| `planned_take_profit_2` | numeric | Yes | — | Planned TP2 (from signal) |
+| `planned_confidence` | integer | Yes | — | Signal confidence at take-trade time |
+| `planned_setup_type` | text | Yes | — | Signal setup type snapshot |
+| `planned_timeframe` | text | Yes | — | Signal timeframe snapshot |
+| `planned_reasoning_snapshot` | text | Yes | — | Copy of `signals.ai_reasoning` at take-trade time |
+| `actual_entry_price` | numeric | No | — | Price the user actually entered at |
+| `actual_stop_loss` | numeric | Yes | — | SL the user actually placed |
+| `actual_take_profit` | numeric | Yes | — | TP the user actually placed |
+| `actual_exit_price` | numeric | Yes | — | Price the trade actually closed at |
+| `lot_size` | numeric | Yes | — | Position size in lots |
+| `position_size` | numeric | Yes | — | Position size in units/contracts (non-forex) |
+| `opened_at` | timestamptz | No | `now()` | When the trade was opened |
+| `closed_at` | timestamptz | Yes | — | When the trade was closed |
+| `result_status` | text | No | `'open'` | `open` / `win` / `loss` / `breakeven` / `cancelled` |
+| `pnl` | numeric | Yes | — | Realised P&L in account currency |
+| `pnl_percent` | numeric | Yes | — | Realised P&L as a percent of account equity |
+| `broker_position_id` | text | Yes | — | Broker ticket ID (used by Phase 2 broker linking) |
+| `notes` | text | Yes | — | Free-form execution notes |
+| `created_at` | timestamptz | No | `now()` | Record created |
+| `updated_at` | timestamptz | No | `now()` | Record updated |
+
+### RLS Policies
+- SELECT, INSERT, UPDATE, DELETE: Users can manage own trades (`user_id = auth.uid()`)
+- ALL: Service role can manage all trades
+
+### Relationships
+- `user_id` → `auth.users(id)` `on delete cascade`
+- `account_id` → `trading_accounts(id)` `on delete restrict` (trade history must never silently disappear with an account)
+- `signal_id` → `signals(id)` `on delete set null` (signal housekeeping preserves trade history; the `planned_*` snapshot retains the context)
+
+### Indexes
+- `(user_id, opened_at desc)` — user timeline
+- `(account_id)` — per-account lookups
+- `(signal_id) where signal_id is not null` — signal → trade joins
+- `(user_id, account_mode, result_status)` — Phase 7 analytics split
+
+### Design note
+`account_mode` is denormalized from `trading_accounts.account_mode` at insert time. This keeps analytics filters cheap and, more importantly, means history does not silently rewrite if a user later flips an account's mode. The `planned_*` columns are a full snapshot rather than a join on `signals` because signals can be invalidated, edited, or even deleted — and we always need to reason about the setup *as it was when the trade was taken*.
+
+### Example — signal-linked trade
+```json
+{
+  "id": "i9j0k1l2-...",
+  "user_id": "f5e6d7c8-...",
+  "account_id": "b2c3d4e5-...",
+  "account_mode": "demo",
+  "signal_id": "f6g7h8i9-...",
+  "symbol": "EUR/USD",
+  "direction": "long",
+  "planned_entry_low": 1.0872,
+  "planned_entry_high": 1.0872,
+  "planned_stop_loss": 1.0830,
+  "planned_take_profit_1": 1.0910,
+  "planned_take_profit_2": 1.0945,
+  "planned_confidence": 78,
+  "planned_setup_type": "Bullish Flag Breakout",
+  "planned_timeframe": "H1",
+  "planned_reasoning_snapshot": "H1 bull flag forming after impulsive move...",
+  "actual_entry_price": 1.0878,
+  "actual_stop_loss": 1.0840,
+  "actual_take_profit": 1.0910,
+  "lot_size": 0.24,
+  "opened_at": "2026-04-14T08:30:00Z",
+  "result_status": "open"
+}
+```
+
+### Example — manual trade
+```json
+{
+  "id": "j0k1l2m3-...",
+  "user_id": "f5e6d7c8-...",
+  "account_id": "b2c3d4e5-...",
+  "account_mode": "real",
+  "signal_id": null,
+  "symbol": "GBP/USD",
+  "direction": "short",
+  "actual_entry_price": 1.2520,
+  "actual_stop_loss": 1.2560,
+  "actual_take_profit": 1.2450,
+  "lot_size": 0.10,
+  "opened_at": "2026-04-14T09:15:00Z",
+  "result_status": "open",
+  "notes": "Manual discretionary short on H4 supply rejection."
+}
+```
+
+---
+
+## 10. `user_roles`
 
 ### Purpose
 Role-based access control. Roles are stored separately from profiles to prevent privilege escalation.
@@ -429,10 +549,15 @@ Triggered on `auth.users` INSERT. Creates:
 auth.users (managed by Supabase Auth)
     │
     ├── profiles (1:1)
-    ├── trading_accounts (1:many, one default)
+    ├── trading_accounts (1:many, one default)  ── account_mode: demo | real
+    │       │
+    │       └── executed_trades (1:many)  ── account_mode snapshot
     ├── user_risk_profiles (1:1)
     ├── user_roles (1:many)
     ├── user_watchlist (1:many)
+    ├── executed_trades (1:many)  ── signal_id → signals (nullable)
+    │       ↑
+    │       └─ (Phase 1) trade_journal_entries.executed_trade_id (nullable)
     ├── trade_journal_entries (1:many)
     └── alerts (1:many)
             │
@@ -440,4 +565,6 @@ auth.users (managed by Supabase Auth)
 
 instruments (standalone, admin-managed)
 signals (standalone, admin/AI-managed, readable by all)
+    ↑
+    └── executed_trades.signal_id (nullable, on delete set null)
 ```

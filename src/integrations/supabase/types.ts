@@ -536,6 +536,123 @@ export type Database = {
         }
         Relationships: []
       }
+      executed_trades: {
+        Row: {
+          account_id: string
+          account_mode: string
+          actual_entry_price: number
+          actual_exit_price: number | null
+          actual_stop_loss: number | null
+          actual_take_profit: number | null
+          broker_position_id: string | null
+          closed_at: string | null
+          created_at: string
+          direction: string
+          id: string
+          lot_size: number | null
+          notes: string | null
+          opened_at: string
+          planned_confidence: number | null
+          planned_entry_high: number | null
+          planned_entry_low: number | null
+          planned_reasoning_snapshot: string | null
+          planned_setup_type: string | null
+          planned_stop_loss: number | null
+          planned_take_profit_1: number | null
+          planned_take_profit_2: number | null
+          planned_timeframe: string | null
+          pnl: number | null
+          pnl_percent: number | null
+          position_size: number | null
+          result_status: string
+          signal_id: string | null
+          symbol: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          account_mode: string
+          actual_entry_price: number
+          actual_exit_price?: number | null
+          actual_stop_loss?: number | null
+          actual_take_profit?: number | null
+          broker_position_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          direction: string
+          id?: string
+          lot_size?: number | null
+          notes?: string | null
+          opened_at?: string
+          planned_confidence?: number | null
+          planned_entry_high?: number | null
+          planned_entry_low?: number | null
+          planned_reasoning_snapshot?: string | null
+          planned_setup_type?: string | null
+          planned_stop_loss?: number | null
+          planned_take_profit_1?: number | null
+          planned_take_profit_2?: number | null
+          planned_timeframe?: string | null
+          pnl?: number | null
+          pnl_percent?: number | null
+          position_size?: number | null
+          result_status?: string
+          signal_id?: string | null
+          symbol: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          account_mode?: string
+          actual_entry_price?: number
+          actual_exit_price?: number | null
+          actual_stop_loss?: number | null
+          actual_take_profit?: number | null
+          broker_position_id?: string | null
+          closed_at?: string | null
+          created_at?: string
+          direction?: string
+          id?: string
+          lot_size?: number | null
+          notes?: string | null
+          opened_at?: string
+          planned_confidence?: number | null
+          planned_entry_high?: number | null
+          planned_entry_low?: number | null
+          planned_reasoning_snapshot?: string | null
+          planned_setup_type?: string | null
+          planned_stop_loss?: number | null
+          planned_take_profit_1?: number | null
+          planned_take_profit_2?: number | null
+          planned_timeframe?: string | null
+          pnl?: number | null
+          pnl_percent?: number | null
+          position_size?: number | null
+          result_status?: string
+          signal_id?: string | null
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "executed_trades_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "trading_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "executed_trades_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trade_journal_entries: {
         Row: {
           closed_at: string | null
@@ -544,6 +661,7 @@ export type Database = {
           direction: string
           emotional_notes: string | null
           entry_price: number
+          executed_trade_id: string | null
           exit_price: number | null
           followed_plan: boolean
           id: string
@@ -570,6 +688,7 @@ export type Database = {
           direction: string
           emotional_notes?: string | null
           entry_price: number
+          executed_trade_id?: string | null
           exit_price?: number | null
           followed_plan?: boolean
           id?: string
@@ -596,6 +715,7 @@ export type Database = {
           direction?: string
           emotional_notes?: string | null
           entry_price?: number
+          executed_trade_id?: string | null
           exit_price?: number | null
           followed_plan?: boolean
           id?: string
@@ -615,11 +735,20 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trade_journal_entries_executed_trade_id_fkey"
+            columns: ["executed_trade_id"]
+            isOneToOne: false
+            referencedRelation: "executed_trades"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       trading_accounts: {
         Row: {
           account_currency: string
+          account_mode: string
           account_name: string
           balance: number
           broker_name: string | null
@@ -633,6 +762,7 @@ export type Database = {
         }
         Insert: {
           account_currency?: string
+          account_mode?: string
           account_name?: string
           balance?: number
           broker_name?: string | null
@@ -646,6 +776,7 @@ export type Database = {
         }
         Update: {
           account_currency?: string
+          account_mode?: string
           account_name?: string
           balance?: number
           broker_name?: string | null
