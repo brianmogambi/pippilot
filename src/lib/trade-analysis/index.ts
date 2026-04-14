@@ -6,3 +6,12 @@ export type {
   TradeAnalysisInput,
   TradeAnalysisOutput,
 } from "./types";
+
+// Phase 18.6: natural-language post-trade review.
+export {
+  summarizeAnalysis,
+  summarizeAnalysisOutput,
+  describeDriftFlags,
+  describeSignalQuality,
+} from "./summarize";
+export type { SummarizeAnalysisInput, TradeReviewSummary } from "./summarize";

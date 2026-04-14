@@ -1,5 +1,10 @@
 import { Activity, AlertTriangle, CheckCircle2, Lightbulb } from "lucide-react";
 import type { TradeAnalysisRow } from "@/types/trading";
+import {
+  summarizeAnalysis,
+  type PrimaryOutcomeReason,
+  type TradeAnalysisFlag,
+} from "@/lib/trade-analysis";
 
 /**
  * Phase 18.5: read-only renderer for a trade_analyses row.
@@ -86,6 +91,20 @@ export default function TradeAnalysisCard({ analysis, compact = false }: Props) 
   const flags = analysis.flags ?? [];
   const actions = analysis.improvement_actions ?? [];
 
+  // Phase 18.6: derive the natural-language review on the fly from
+  // the persisted row. The summarizer is pure, fast, and always in
+  // sync with the current rule version, so we never need to backfill
+  // when the templates change.
+  const review = summarizeAnalysis({
+    flags: flags as TradeAnalysisFlag[],
+    primaryOutcomeReason:
+      (analysis.primary_outcome_reason as PrimaryOutcomeReason | null) ??
+      "trade_not_yet_closed",
+    signalQualityScore: analysis.signal_quality_score,
+    executionQualityScore: analysis.execution_quality_score,
+    improvementActions: actions,
+  });
+
   return (
     <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.03] p-3">
       {!compact && (
@@ -106,6 +125,16 @@ export default function TradeAnalysisCard({ analysis, compact = false }: Props) 
           <Activity className="h-4 w-4 text-warning" />
         )}
         <span className="text-sm font-medium text-foreground">{outcomeLabel}</span>
+      </div>
+
+      {/* Phase 18.6: NL post-trade review */}
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground leading-snug">
+          {review.headline}
+        </p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {review.body}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
