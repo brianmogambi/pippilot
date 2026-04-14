@@ -19,10 +19,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowUpRight, ArrowDownRight, Zap, Wallet } from "lucide-react";
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Zap,
+  Wallet,
+  AlertTriangle,
+  ShieldCheck,
+} from "lucide-react";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
-import { useTradingAccounts } from "@/hooks/use-account";
+import { useTradingAccounts, useRiskProfile } from "@/hooks/use-account";
 import { useCreateExecutedTrade } from "@/hooks/use-executed-trades";
+import { usePipValue } from "@/hooks/use-pip-value";
+import { evaluateTrade } from "@/lib/risk-engine";
 import {
   buildExecutedTradeFromSignal,
   buildManualExecutedTrade,
@@ -95,9 +104,17 @@ export default function TakeTradeDialog({
   onSuccess,
 }: TakeTradeDialogProps) {
   const { data: accounts = [] } = useTradingAccounts();
+  const { data: riskProfile } = useRiskProfile();
   const createMutation = useCreateExecutedTrade();
 
   const [form, setForm] = useState<FormState>(emptyForm);
+
+  // Phase 18.10: live pip value for the pair the user is opening in.
+  // Falls back to a static estimate when market data isn't loaded yet
+  // — the suggestion still renders but is labelled "(estimated)".
+  const { pipValue: pipValueUsd, freshness: pipFreshness } = usePipValue(
+    form.symbol || "EUR/USD",
+  );
 
   // Preferred default: the user's default account. Re-runs whenever the
   // account list arrives asynchronously.
@@ -132,6 +149,77 @@ export default function TakeTradeDialog({
   );
   const selectedMode: AccountMode =
     (selectedAccount?.account_mode as AccountMode | undefined) ?? "demo";
+
+  // Phase 18.10: live risk-sized lot suggestion. Uses the existing
+  // `evaluateTrade()` engine — the same one that powers the /calculator
+  // page — so the dialog and the standalone calculator always agree.
+  // Re-runs whenever the user edits the entry, SL, symbol, or swaps
+  // accounts, but NOT when they type into the lot_size input (so the
+  // suggestion stays stable while the user decides whether to accept
+  // or override it).
+  const riskTargetPct = Number(riskProfile?.risk_per_trade_pct ?? 1);
+  const suggestion = useMemo(() => {
+    if (!selectedAccount) return null;
+    const entry = Number(form.actual_entry_price);
+    const sl = Number(form.actual_stop_loss);
+    if (!entry || !sl || entry === sl || !form.symbol) return null;
+
+    const evaluation = evaluateTrade({
+      account: {
+        balance: Number(selectedAccount.balance),
+        equity: Number(selectedAccount.equity),
+        currency: selectedAccount.account_currency,
+      },
+      profile: {
+        riskPerTradePct: riskTargetPct,
+        maxDailyLossPct: Number(riskProfile?.max_daily_loss_pct ?? 5),
+        maxTotalOpenRiskPct: Number(riskProfile?.max_total_open_risk_pct ?? 10),
+        conservativeMode: riskProfile?.conservative_mode ?? false,
+      },
+      trade: {
+        pair: form.symbol,
+        entry,
+        stopLoss: sl,
+        pipValueUSD: pipValueUsd,
+        riskMode: "percent",
+      },
+      daily: { realizedLossUSD: 0, openRiskUSD: 0 },
+    });
+
+    if (evaluation.lotSize <= 0) return null;
+    if (Object.keys(evaluation.validationErrors).length > 0) return null;
+
+    return {
+      lotSize: Math.round(evaluation.lotSize * 100) / 100,
+      riskUsd: evaluation.riskAmountUSD,
+      pipDistance: evaluation.pipDistance,
+    };
+  }, [
+    selectedAccount,
+    form.actual_entry_price,
+    form.actual_stop_loss,
+    form.symbol,
+    pipValueUsd,
+    riskTargetPct,
+    riskProfile?.max_daily_loss_pct,
+    riskProfile?.max_total_open_risk_pct,
+    riskProfile?.conservative_mode,
+  ]);
+
+  // Over-limit warning: fires when the user's typed lot size exceeds
+  // the risk-engine suggestion by >50%. We compute the implied risk %
+  // so the warning is specific ("1.6% of account") rather than vague.
+  const overLimit = useMemo(() => {
+    if (!suggestion) return null;
+    const typed = Number(form.lot_size);
+    if (!typed || typed <= suggestion.lotSize * 1.5) return null;
+    const ratio = typed / suggestion.lotSize;
+    return {
+      typed,
+      ratio,
+      impliedRiskPct: ratio * riskTargetPct,
+    };
+  }, [suggestion, form.lot_size, riskTargetPct]);
 
   const isManual = !signal;
   const canSubmit =
@@ -342,17 +430,87 @@ export default function TakeTradeDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Lot Size</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={form.lot_size}
-                  onChange={(e) => setForm({ ...form, lot_size: e.target.value })}
-                  placeholder="e.g. 0.10"
-                />
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Lot Size</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.lot_size}
+                    onChange={(e) =>
+                      setForm({ ...form, lot_size: e.target.value })
+                    }
+                    placeholder={
+                      suggestion ? suggestion.lotSize.toFixed(2) : "e.g. 0.10"
+                    }
+                  />
+                </div>
               </div>
+
+              {/* Phase 18.10: risk-engine-driven suggestion + over-limit warning */}
+              {suggestion ? (
+                <div className="rounded-md border border-primary/20 bg-primary/[0.04] p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <ShieldCheck className="h-3 w-3 text-primary" />
+                      <span>
+                        Suggested:{" "}
+                        <span className="font-mono font-semibold text-foreground">
+                          {suggestion.lotSize.toFixed(2)} lots
+                        </span>
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-[10px] px-2"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          lot_size: suggestion.lotSize.toFixed(2),
+                        })
+                      }
+                    >
+                      Use suggested
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    {riskTargetPct}% of account ={" "}
+                    <span className="font-mono text-foreground">
+                      ${suggestion.riskUsd.toFixed(2)}
+                    </span>{" "}
+                    on a {suggestion.pipDistance.toFixed(1)}-pip stop
+                    {pipFreshness !== "live" && (
+                      <span className="ml-1 opacity-70">
+                        (pip value estimated — no live market data)
+                      </span>
+                    )}
+                  </p>
+                  {overLimit && (
+                    <div className="flex items-start gap-1.5 text-[10px] text-warning border-t border-warning/20 pt-1.5 mt-1">
+                      <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                      <span className="leading-snug">
+                        {overLimit.typed.toFixed(2)} lots is ~
+                        {overLimit.ratio.toFixed(1)}× your target — that's{" "}
+                        <span className="font-semibold">
+                          {overLimit.impliedRiskPct.toFixed(1)}%
+                        </span>{" "}
+                        of account at risk on this trade.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                form.actual_entry_price &&
+                form.actual_stop_loss && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Enter a different stop loss than the entry to see the
+                    risk-sized suggestion.
+                  </p>
+                )
+              )}
             </div>
 
             <div className="space-y-1.5">

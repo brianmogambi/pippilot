@@ -71,9 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session);
         setLoading(false);
+        // Phase 18.10: Supabase's JS client auto-refreshes tokens on
+        // window focus. The TOKEN_REFRESHED event does not imply the
+        // profile changed — skipping the refetch here prevents the
+        // profileLoading flicker that used to unmount the whole
+        // protected route tree (and any open dialog inside it).
+        // Defense in depth alongside the ProtectedRoute fix that now
+        // stays mounted during background profile refreshes.
+        if (event === "TOKEN_REFRESHED") return;
         if (session?.user?.id) {
           setTimeout(() => fetchProfile(session.user.id), 0);
         } else {
