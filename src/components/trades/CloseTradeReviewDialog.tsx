@@ -31,6 +31,7 @@ import {
 } from "@/hooks/use-trade-analyses";
 import { computeTradePnl } from "@/lib/trade-pnl";
 import { analyzeTrade } from "@/lib/trade-analysis";
+import { buildJournalFromClose } from "@/lib/trade-build/build-journal-from-close";
 import type { AccountMode, ExecutedTrade } from "@/types/trading";
 
 /**
@@ -255,40 +256,29 @@ export default function CloseTradeReviewDialog({
 
     // 3. Optionally create the linked journal entry. journalOnly
     // mode forces this on — that's the whole reason the dialog
-    // was opened.
+    // was opened. Payload construction is a pure helper so the
+    // "journal auto-prefill" contract can be unit-tested — see
+    // build-journal-from-close.test.ts.
     if (form.create_journal || journalOnly) {
-      const journalPayload = {
-        executed_trade_id: trade.id,
-        account_mode: trade.account_mode as AccountMode,
-        pair: trade.symbol,
-        direction: trade.direction,
-        entry_price: Number(trade.actual_entry_price),
-        exit_price: Number(form.exit_price),
-        stop_loss: trade.actual_stop_loss != null ? Number(trade.actual_stop_loss) : null,
-        take_profit:
-          trade.actual_take_profit != null ? Number(trade.actual_take_profit) : null,
-        lot_size: trade.lot_size != null ? Number(trade.lot_size) : null,
-        result_pips: Math.round(pnlPreview.pips * 10) / 10,
-        result_amount:
-          pnlPreview.pnlUsd != null ? Math.round(pnlPreview.pnlUsd * 100) / 100 : null,
-        status: "closed",
-        opened_at: trade.opened_at,
-        closed_at: closedAt,
-        setup_type: trade.planned_setup_type ?? null,
-        confidence: trade.planned_confidence ?? null,
-        setup_reasoning: trade.planned_reasoning_snapshot ?? null,
-        followed_plan: form.followed_plan,
-        lesson_learned: form.lesson_learned || null,
-        emotion_before: form.emotion_before || null,
-        emotion_after: form.emotion_after || null,
-        setup_rating: form.setup_rating || null,
-        execution_rating: form.execution_rating || null,
-        discipline_rating: form.discipline_rating || null,
-        mistake_tags: form.mistake_tags,
-        screenshot_before: form.screenshot_before || null,
-        screenshot_after: form.screenshot_after || null,
-        notes: form.close_notes || null,
-      };
+      const journalPayload = buildJournalFromClose({
+        trade,
+        review: {
+          followedPlan: form.followed_plan,
+          lessonLearned: form.lesson_learned,
+          emotionBefore: form.emotion_before,
+          emotionAfter: form.emotion_after,
+          setupRating: form.setup_rating,
+          executionRating: form.execution_rating,
+          disciplineRating: form.discipline_rating,
+          mistakeTags: form.mistake_tags,
+          screenshotBefore: form.screenshot_before,
+          screenshotAfter: form.screenshot_after,
+          closeNotes: form.close_notes,
+        },
+        actualExitPrice: Number(form.exit_price),
+        closedAt,
+        pnl: pnlPreview,
+      });
       await createJournal.mutateAsync(journalPayload);
     }
 

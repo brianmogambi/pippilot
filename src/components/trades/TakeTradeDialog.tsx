@@ -23,6 +23,10 @@ import { ArrowUpRight, ArrowDownRight, Zap, Wallet } from "lucide-react";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
 import { useTradingAccounts } from "@/hooks/use-account";
 import { useCreateExecutedTrade } from "@/hooks/use-executed-trades";
+import {
+  buildExecutedTradeFromSignal,
+  buildManualExecutedTrade,
+} from "@/lib/trade-build/build-executed-trade";
 import type {
   AccountMode,
   EnrichedSignal,
@@ -79,25 +83,9 @@ const emptyForm: FormState = {
   notes: "",
 };
 
-/**
- * Narrow an EnrichedSignal to its PairAnalysis when available. The
- * entry *zone* lives on the analysis row (Phase 10 pair_analyses),
- * while the signal itself only has a single entry_price. We use the
- * zone for planned_entry_low/high when present and collapse to the
- * point price otherwise.
- */
-function getPlannedZone(
-  signal: EnrichedSignal | Signal | null | undefined,
-): { low: number | null; high: number | null } {
-  if (!signal) return { low: null, high: null };
-  if ("analysis" in signal && signal.analysis?.entryZone) {
-    const [low, high] = signal.analysis.entryZone;
-    return { low, high };
-  }
-  const entry =
-    typeof signal.entry_price === "number" ? signal.entry_price : Number(signal.entry_price);
-  return { low: entry, high: entry };
-}
+// Phase 18.9: planned-zone resolution moved into the pure helper
+// at src/lib/trade-build/build-executed-trade.ts so the dialog and
+// tests share exactly the same snapshot logic.
 
 export default function TakeTradeDialog({
   open,
@@ -156,36 +144,29 @@ export default function TakeTradeDialog({
     e.preventDefault();
     if (!canSubmit || !selectedAccount) return;
 
-    const zone = getPlannedZone(signal);
-    const signalRef = signal ?? null;
-
-    await createMutation.mutateAsync({
-      account_id: selectedAccount.id,
-      account_mode: selectedMode,
-      signal_id: signalRef?.id ?? null,
+    // Phase 18.9: payload construction lives in the pure helper so
+    // the "signal snapshot correctness" contract can be unit-tested
+    // independently of React. See build-executed-trade.test.ts.
+    const formInputs = {
       symbol: form.symbol,
       direction: form.direction,
-      planned_entry_low: zone.low,
-      planned_entry_high: zone.high,
-      planned_stop_loss: signalRef?.stop_loss != null ? Number(signalRef.stop_loss) : null,
-      planned_take_profit_1:
-        signalRef?.take_profit_1 != null ? Number(signalRef.take_profit_1) : null,
-      planned_take_profit_2:
-        signalRef?.take_profit_2 != null ? Number(signalRef.take_profit_2) : null,
-      planned_confidence:
-        signalRef?.confidence != null ? Number(signalRef.confidence) : null,
-      planned_setup_type: signalRef?.setup_type ?? null,
-      planned_timeframe: signalRef?.timeframe ?? null,
-      planned_reasoning_snapshot: signalRef?.ai_reasoning ?? null,
-      actual_entry_price: Number(form.actual_entry_price),
-      actual_stop_loss: form.actual_stop_loss ? Number(form.actual_stop_loss) : null,
-      actual_take_profit: form.actual_take_profit
+      actualEntryPrice: Number(form.actual_entry_price),
+      actualStopLoss: form.actual_stop_loss ? Number(form.actual_stop_loss) : null,
+      actualTakeProfit: form.actual_take_profit
         ? Number(form.actual_take_profit)
         : null,
-      lot_size: form.lot_size ? Number(form.lot_size) : null,
+      lotSize: form.lot_size ? Number(form.lot_size) : null,
       notes: form.notes || null,
-      result_status: "open",
-    });
+    };
+    const accountRef = {
+      id: selectedAccount.id,
+      account_mode: selectedMode,
+    };
+    const payload = signal
+      ? buildExecutedTradeFromSignal(signal, formInputs, accountRef)
+      : buildManualExecutedTrade(formInputs, accountRef);
+
+    await createMutation.mutateAsync(payload);
 
     onOpenChange(false);
     onSuccess?.();
