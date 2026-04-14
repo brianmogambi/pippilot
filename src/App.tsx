@@ -16,6 +16,7 @@ import SettingsPage from "./pages/SettingsPage";
 import Watchlist from "./pages/Watchlist";
 import PairDetail from "./pages/PairDetail";
 import Journal from "./pages/Journal";
+import Analytics from "./pages/Analytics";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -55,6 +56,7 @@ const App = () => (
               <Route path="/calculator" element={<CalculatorPage />} />
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/journal" element={<Journal />} />
+              <Route path="/analytics" element={<Analytics />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/learn" element={<Learn />} />
               <Route path="/admin" element={<AdminReview />} />
