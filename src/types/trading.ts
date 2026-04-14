@@ -93,6 +93,9 @@ export type TradeResultStatus =
   | "breakeven"
   | "cancelled";
 
+// Phase 18.5: rule-based post-trade analysis row.
+export type TradeAnalysisRow = Tables<"trade_analyses">;
+
 // ── Phase 14: Broker integration DB row aliases ────────────────
 export type BrokerConnection = Tables<"broker_connections">;
 export type SyncedAccount = Tables<"synced_accounts">;

@@ -515,7 +515,73 @@ Manual trades are supported by leaving `signal_id = null`.
 
 ---
 
-## 10. `user_roles`
+## 10. `trade_analyses`
+
+### Purpose
+Persists the output of the deterministic post-trade rule engine that lives in `src/lib/trade-analysis/`. One row per executed trade — the close flow upserts on the unique `executed_trade_id` so any later re-compute keeps a single canonical analysis. Phase 18.5.
+
+### Fields
+| Field | Type | Nullable | Default | Description |
+|-------|------|----------|---------|-------------|
+| `id` | uuid | No | `gen_random_uuid()` | Primary key |
+| `user_id` | uuid | No | — | Owner user ID |
+| `executed_trade_id` | uuid | No | — | FK → `executed_trades(id)`, `unique`, `on delete cascade` |
+| `flags` | text[] | No | `'{}'` | Flag codes raised by the rule engine |
+| `details` | jsonb | No | `'{}'` | Per-flag context (deltas, thresholds) |
+| `signal_quality_score` | integer | Yes | — | 0–100. Null for manual trades. |
+| `execution_quality_score` | integer | Yes | — | 0–100. Null for manual trades. |
+| `discipline_score` | integer | Yes | — | 0–100. Self-report + mistake tags. |
+| `risk_management_score` | integer | Yes | — | 0–100. Stop / R:R / risk-rule tags. |
+| `primary_outcome_reason` | text | Yes | — | Canonical outcome bucket (see check constraint) |
+| `improvement_actions` | text[] | No | `'{}'` | Human-readable next-action phrases |
+| `rule_version` | text | No | `'v1'` | Bumped when the rule set changes |
+| `created_at` | timestamptz | No | `now()` | Created |
+| `updated_at` | timestamptz | No | `now()` | Updated |
+
+`primary_outcome_reason` is one of: `won_per_plan`, `won_despite_execution_drift`, `lost_per_plan`, `lost_to_execution_drift`, `signal_invalidated`, `breakeven`, `manual_no_signal`, `trade_not_yet_closed`, `cancelled`.
+
+### Flag codes (current rule set, `v1`)
+`late_entry`, `early_entry`, `tighter_stop_than_plan`, `wider_stop_than_plan`, `reduced_rr`, `improved_rr`, `followed_plan`, `deviated_from_plan`, `setup_failed_normally`, `signal_invalidated`, `probable_execution_error`. Codes are append-only — never remove or rename — so persisted rows from older rule versions remain readable.
+
+### RLS Policies
+- SELECT, INSERT, UPDATE, DELETE: Users can manage own analyses (`user_id = auth.uid()`)
+- ALL: Service role can manage all rows
+
+### Relationships
+- `user_id` → `auth.users(id)` `on delete cascade`
+- `executed_trade_id` → `executed_trades(id)` `on delete cascade`, **unique**
+
+### Indexes
+- `(user_id, created_at desc)` — user timeline
+- `(executed_trade_id)` — single-trade lookups
+- `(user_id, primary_outcome_reason)` — Phase 18.7 analytics breakdown
+
+### Example
+```json
+{
+  "id": "k1l2m3n4-...",
+  "user_id": "f5e6d7c8-...",
+  "executed_trade_id": "i9j0k1l2-...",
+  "flags": ["late_entry", "deviated_from_plan", "probable_execution_error"],
+  "details": {
+    "late_entry": { "drift": 0.0035, "tolerance": 0.0009, "plannedZoneHigh": 1.0810, "actualEntry": 1.0840 }
+  },
+  "signal_quality_score": 75,
+  "execution_quality_score": 60,
+  "discipline_score": 70,
+  "risk_management_score": 100,
+  "primary_outcome_reason": "lost_to_execution_drift",
+  "improvement_actions": [
+    "Wait for price to pull back into the planned entry zone before entering — the late fill reduced your risk/reward.",
+    "This loss appears driven by execution rather than the signal. Review what you'd change next time."
+  ],
+  "rule_version": "v1"
+}
+```
+
+---
+
+## 11. `user_roles`
 
 ### Purpose
 Role-based access control. Roles are stored separately from profiles to prevent privilege escalation.

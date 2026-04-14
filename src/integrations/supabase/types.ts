@@ -653,6 +653,65 @@ export type Database = {
           },
         ]
       }
+      trade_analyses: {
+        Row: {
+          created_at: string
+          details: Json
+          discipline_score: number | null
+          executed_trade_id: string
+          execution_quality_score: number | null
+          flags: string[]
+          id: string
+          improvement_actions: string[]
+          primary_outcome_reason: string | null
+          risk_management_score: number | null
+          rule_version: string
+          signal_quality_score: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          discipline_score?: number | null
+          executed_trade_id: string
+          execution_quality_score?: number | null
+          flags?: string[]
+          id?: string
+          improvement_actions?: string[]
+          primary_outcome_reason?: string | null
+          risk_management_score?: number | null
+          rule_version?: string
+          signal_quality_score?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          discipline_score?: number | null
+          executed_trade_id?: string
+          execution_quality_score?: number | null
+          flags?: string[]
+          id?: string
+          improvement_actions?: string[]
+          primary_outcome_reason?: string | null
+          risk_management_score?: number | null
+          rule_version?: string
+          signal_quality_score?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trade_analyses_executed_trade_id_fkey"
+            columns: ["executed_trade_id"]
+            isOneToOne: true
+            referencedRelation: "executed_trades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trade_journal_entries: {
         Row: {
           account_mode: string

@@ -25,7 +25,12 @@ import { useCloseExecutedTrade } from "@/hooks/use-executed-trades";
 import { useCreateJournalEntry } from "@/hooks/use-journal";
 import { useTradingAccount } from "@/hooks/use-account";
 import { usePipValues } from "@/hooks/use-pip-value";
+import {
+  useUpsertTradeAnalysis,
+  tradeAnalysisOutputToInsert,
+} from "@/hooks/use-trade-analyses";
 import { computeTradePnl } from "@/lib/trade-pnl";
+import { analyzeTrade } from "@/lib/trade-analysis";
 import type { AccountMode, ExecutedTrade } from "@/types/trading";
 
 /**
@@ -105,6 +110,7 @@ export default function CloseTradeReviewDialog({
 }: CloseTradeReviewDialogProps) {
   const closeMutation = useCloseExecutedTrade();
   const createJournal = useCreateJournalEntry();
+  const upsertAnalysis = useUpsertTradeAnalysis();
   const { data: account } = useTradingAccount();
   const { getPipValue } = usePipValues();
 
@@ -172,7 +178,50 @@ export default function CloseTradeReviewDialog({
       },
     });
 
-    // 2. Optionally create the linked journal entry.
+    // 2. Phase 18.5: run the rule engine and persist the analysis.
+    // We intentionally compute this BEFORE the optional journal insert
+    // so the resulting flags can also flow into Phase 18.6's NL review.
+    // Failures are soft — the trade is already closed and the analysis
+    // can always be recomputed later from the same persisted inputs.
+    try {
+      const analysis = analyzeTrade({
+        direction: trade.direction as "long" | "short",
+        pair: trade.symbol,
+        plannedEntryLow:
+          trade.planned_entry_low != null ? Number(trade.planned_entry_low) : null,
+        plannedEntryHigh:
+          trade.planned_entry_high != null ? Number(trade.planned_entry_high) : null,
+        plannedStopLoss:
+          trade.planned_stop_loss != null ? Number(trade.planned_stop_loss) : null,
+        plannedTakeProfit1:
+          trade.planned_take_profit_1 != null
+            ? Number(trade.planned_take_profit_1)
+            : null,
+        plannedConfidence: trade.planned_confidence ?? null,
+        actualEntry: Number(trade.actual_entry_price),
+        actualStopLoss:
+          trade.actual_stop_loss != null ? Number(trade.actual_stop_loss) : null,
+        actualTakeProfit:
+          trade.actual_take_profit != null ? Number(trade.actual_take_profit) : null,
+        actualExit: Number(form.exit_price),
+        resultStatus: pnlPreview.resultStatus,
+        followedPlan: form.create_journal ? form.followed_plan : null,
+        mistakeTags: form.create_journal ? form.mistake_tags : [],
+        signalLinked: !!trade.signal_id,
+        // Live signal status is fetched server-side in a future
+        // background recompute job; the dialog only knows what the
+        // trader knows at close time.
+        liveSignalStatus: null,
+      });
+      await upsertAnalysis.mutateAsync(
+        tradeAnalysisOutputToInsert(trade.id, analysis),
+      );
+    } catch (e) {
+      // Soft failure — the toast is already raised by the hook's onError.
+      console.error("Trade analysis failed", e);
+    }
+
+    // 3. Optionally create the linked journal entry.
     if (form.create_journal) {
       const journalPayload = {
         executed_trade_id: trade.id,

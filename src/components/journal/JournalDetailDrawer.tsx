@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import StatusBadge from "@/components/ui/status-badge";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
+import TradeAnalysisCard from "@/components/trades/TradeAnalysisCard";
 import { ArrowUpRight, ArrowDownRight, Pencil, Trash2, ImageIcon, CheckCircle2, XCircle, Star, Link2 } from "lucide-react";
 import { useDeleteJournalEntry } from "@/hooks/use-journal";
+import { useTradeAnalysisForTrade } from "@/hooks/use-trade-analyses";
 import type { AccountMode } from "@/types/trading";
 import {
   AlertDialog,
@@ -27,6 +29,10 @@ interface Props {
 
 export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit }: Props) {
   const deleteMutation = useDeleteJournalEntry();
+  // Phase 18.5: pull the rule-engine analysis for the linked trade,
+  // if any. Hook is called unconditionally to keep hook order stable;
+  // it self-disables when entry?.executed_trade_id is falsy.
+  const { data: analysis } = useTradeAnalysisForTrade(entry?.executed_trade_id ?? null);
 
   if (!entry) return null;
 
@@ -140,6 +146,11 @@ export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit 
           </div>
 
           <Separator />
+
+          {/* Phase 18.5: rule-engine analysis appears above the
+              prose sections so the user sees the structured verdict
+              before reading their own notes. */}
+          {analysis && <TradeAnalysisCard analysis={analysis} />}
 
           <Section title="Setup Reasoning" content={entry.setup_reasoning} />
           <Section title="Notes" content={entry.notes} />
