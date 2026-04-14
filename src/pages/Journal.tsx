@@ -1,8 +1,10 @@
 import { useState, useMemo } from "react";
-import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3, Link2 } from "lucide-react";
+import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3, Link2, Zap } from "lucide-react";
 import { useJournalEntries, useJournalStats } from "@/hooks/use-journal";
 import StatusBadge from "@/components/ui/status-badge";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
+import { Button } from "@/components/ui/button";
+import TakeTradeDialog from "@/components/trades/TakeTradeDialog";
 import type { AccountMode } from "@/types/trading";
 import StatCard from "@/components/ui/stat-card";
 import EmptyState from "@/components/ui/empty-state";
@@ -19,6 +21,9 @@ export default function Journal() {
   const [editEntry, setEditEntry] = useState<any | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  // Phase 18.3: manual trade entry point — same dialog as signal-linked
+  // Take Trade, but with no signal passed.
+  const [manualTradeOpen, setManualTradeOpen] = useState(false);
 
   // Phase 18.2: pass the active mode filter down to the query so we never
   // pull the full combined list when the user has picked a mode.
@@ -55,13 +60,30 @@ export default function Journal() {
 
   return (
     <div className="p-4 md:p-6 lg:p-8 space-y-6 pb-mobile-nav">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Trade Journal</h1>
           <p className="text-sm text-muted-foreground mt-1">Track, review, and learn from your trading performance</p>
         </div>
-        <JournalEntryForm onSuccess={refetch} open={formOpen} onOpenChange={setFormOpen} />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setManualTradeOpen(true)}
+          >
+            <Zap className="h-3.5 w-3.5" /> Take Manual Trade
+          </Button>
+          <JournalEntryForm onSuccess={refetch} open={formOpen} onOpenChange={setFormOpen} />
+        </div>
       </div>
+
+      {/* Phase 18.3: manual trade dialog (no signal) */}
+      <TakeTradeDialog
+        open={manualTradeOpen}
+        onOpenChange={setManualTradeOpen}
+        signal={null}
+      />
 
       {/* 6 stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

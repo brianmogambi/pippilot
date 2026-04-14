@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -7,6 +8,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import TakeTradeDialog from "@/components/trades/TakeTradeDialog";
 import type { Freshness } from "@/lib/data-freshness";
 import {
   ArrowUpRight,
@@ -27,6 +30,7 @@ interface Props {
 }
 
 export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props) {
+  const [takeTradeOpen, setTakeTradeOpen] = useState(false);
   if (!signal) return null;
 
   const isLong = signal.direction === "long";
@@ -103,6 +107,16 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
         </SheetHeader>
 
         <div className="space-y-5 pt-5">
+          {/* Phase 18.3: Take Trade CTA (hidden for no_trade signals) */}
+          {!isNoTrade && (
+            <Button
+              className="w-full gap-1.5"
+              onClick={() => setTakeTradeOpen(true)}
+            >
+              <Zap className="h-4 w-4" /> Take This Trade
+            </Button>
+          )}
+
           {/* No Trade Warning */}
           {isNoTrade && (
             <div className="rounded-lg border border-warning/30 bg-warning/10 p-4">
@@ -236,6 +250,13 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
             </p>
           </div>
         </div>
+
+        {/* Phase 18.3: Take Trade dialog, mounted once per drawer. */}
+        <TakeTradeDialog
+          open={takeTradeOpen}
+          onOpenChange={setTakeTradeOpen}
+          signal={signal}
+        />
       </SheetContent>
     </Sheet>
   );

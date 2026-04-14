@@ -1,14 +1,18 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, ArrowDownRight, Ban, Info, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Ban, Info, Loader2, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Signal } from "@/types/trading";
 import RiskCalculator from "@/components/calculator/RiskCalculator";
+import { Button } from "@/components/ui/button";
+import TakeTradeDialog from "@/components/trades/TakeTradeDialog";
 
 export default function SignalDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const [takeTradeOpen, setTakeTradeOpen] = useState(false);
 
   const { data: signal, isLoading, error } = useQuery({
     queryKey: ["signal", id],
@@ -52,7 +56,7 @@ export default function SignalDetail() {
       </Link>
 
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-bold text-foreground">{signal.pair}</h1>
         <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">{signal.timeframe}</span>
         {isNoTrade ? (
@@ -65,7 +69,22 @@ export default function SignalDetail() {
             {isLong ? "Long" : "Short"}
           </span>
         )}
+        {!isNoTrade && (
+          <Button
+            size="sm"
+            className="ml-auto gap-1.5"
+            onClick={() => setTakeTradeOpen(true)}
+          >
+            <Zap className="h-3.5 w-3.5" /> Take Trade
+          </Button>
+        )}
       </div>
+
+      <TakeTradeDialog
+        open={takeTradeOpen}
+        onOpenChange={setTakeTradeOpen}
+        signal={signal}
+      />
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Left Column */}
