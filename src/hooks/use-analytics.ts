@@ -17,6 +17,7 @@ import {
   type JournalOutcome,
 } from "@/lib/analytics";
 import { useAuth } from "@/contexts/AuthContext";
+import type { AccountMode } from "@/types/trading";
 
 export function useBacktestAnalytics(runId: string | null | undefined) {
   return useQuery<AnalyticsOutput>({
@@ -41,12 +42,22 @@ export function useLiveSignalAnalytics(filters: LiveSignalFilters) {
   });
 }
 
-export function useJournalAnalytics(range: { since: string; until?: string }) {
+/**
+ * Phase 18.2: accepts an optional `mode` filter so journal analytics
+ * can be scoped to demo-only or real-only performance. Leave `mode`
+ * undefined to request combined data, but callers that render a single
+ * aggregate MUST pass a mode — combined stats would silently mix
+ * demo and real.
+ */
+export function useJournalAnalytics(
+  range: { since: string; until?: string },
+  mode?: AccountMode,
+) {
   const { user } = useAuth();
   return useQuery<JournalOutcome[]>({
-    queryKey: ["analytics", "journal", user?.id, range],
+    queryKey: ["analytics", "journal", user?.id, range, mode ?? "all"],
     enabled: !!user?.id,
-    queryFn: () => fetchJournalOutcomes(supabase, user!.id, range),
+    queryFn: () => fetchJournalOutcomes(supabase, user!.id, range, mode),
     staleTime: 60_000,
   });
 }

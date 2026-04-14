@@ -2,10 +2,15 @@ import { useState } from "react";
 import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, AlertTriangle, BookOpen, Activity, Lightbulb, BarChart3, Clock, Circle, X, Zap, ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTradingAccount, useRiskProfile } from "@/hooks/use-account";
+import {
+  useTradingAccount,
+  useRiskProfile,
+  useDefaultAccountMode,
+} from "@/hooks/use-account";
 import { useEnrichedActiveSignals, useSignalFreshness } from "@/hooks/use-signals";
 import { useDashboardAlerts } from "@/hooks/use-alerts";
 import { useDashboardJournal, useDashboardJournalStats } from "@/hooks/use-journal";
+import AccountModeBadge from "@/components/ui/account-mode-badge";
 import { useDashboardWatchlist } from "@/hooks/use-watchlist";
 import { useMarketSummary, useAllMarketData } from "@/hooks/use-market-data";
 import { useDailyRiskUsed } from "@/hooks/use-daily-risk";
@@ -156,10 +161,13 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { data: account, isLoading: loadingAccount } = useTradingAccount();
   const { data: riskProfile } = useRiskProfile();
+  // Phase 18.2: scope the dashboard journal panel to the user's default
+  // account mode so demo and real performance are never silently mixed.
+  const defaultMode = useDefaultAccountMode();
   const { enriched: signals, isLoading: loadingSignals } = useEnrichedActiveSignals(8);
   const { data: alerts = [] } = useDashboardAlerts(5);
-  const { data: journalEntries = [] } = useDashboardJournal(3);
-  const { data: journalStats } = useDashboardJournalStats();
+  const { data: journalEntries = [] } = useDashboardJournal(3, defaultMode);
+  const { data: journalStats } = useDashboardJournalStats(defaultMode);
   const { data: watchlist = [] } = useDashboardWatchlist(6);
   const marketSummary = useMarketSummary();
   const { data: marketDataMap } = useAllMarketData();
@@ -452,7 +460,10 @@ const Dashboard = () => {
               onClick={() => setJournalExpanded(!journalExpanded)}
               className="flex items-center justify-between w-full text-left"
             >
-              <h2 className="font-semibold text-foreground">Journal & Tips</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-foreground">Journal & Tips</h2>
+                <AccountModeBadge mode={defaultMode} />
+              </div>
               {journalExpanded
                 ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
                 : <ChevronDown className="h-4 w-4 text-muted-foreground" />

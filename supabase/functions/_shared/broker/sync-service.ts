@@ -65,7 +65,13 @@ export async function syncConnection(
     let totalOrders = 0;
 
     for (const acct of accounts) {
-      // Upsert synced_accounts
+      // Phase 18.2 note: `acct.isLive` is the broker-reported demo/real
+      // flag. When a future phase links `synced_accounts` rows to
+      // internal `trading_accounts`, derive `trading_accounts.account_mode`
+      // as `isLive ? 'real' : 'demo'` so the app's demo/real separation
+      // stays consistent with the broker's view. This sync step does not
+      // yet create trading_accounts rows, so there's nothing to tag here
+      // — keep this comment as the contract for the upcoming link.
       const { data: upserted } = await supabase
         .from("synced_accounts")
         .upsert(

@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTradingAccount } from "@/hooks/use-account";
 import { usePipValues } from "@/hooks/use-pip-value";
 import { calculateOpenRiskUSD, type OpenPosition } from "@/lib/risk-engine";
-import type { JournalEntry } from "@/types/trading";
+import type { AccountMode, JournalEntry } from "@/types/trading";
 import type { Freshness } from "@/lib/data-freshness";
 
 function startOfTodayISO(): string {
@@ -21,15 +21,19 @@ export function useDailyRiskUsed(): {
   const { user } = useAuth();
   const { data: account } = useTradingAccount();
   const { getPipValue, freshness: pipFreshness } = usePipValues();
+  // Phase 18.2: scope open-trade risk to the default account's mode so
+  // demo positions never inflate the real-account daily-risk gauge.
+  const accountMode: AccountMode = (account?.account_mode as AccountMode) ?? "demo";
 
   const { data: trades, isLoading } = useQuery({
-    queryKey: ["daily-risk-trades", user?.id],
+    queryKey: ["daily-risk-trades", user?.id, accountMode],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("trade_journal_entries")
         .select("*")
         .eq("user_id", user!.id)
         .eq("status", "open")
+        .eq("account_mode", accountMode)
         .gte("created_at", startOfTodayISO());
       if (error) throw error;
       return (data ?? []) as JournalEntry[];

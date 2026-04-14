@@ -100,6 +100,9 @@ export interface LiveSignalFilters {
  * Journal-derived outcome row. The trade journal table does not store
  * setup_type or confidence, so journal analytics is necessarily a much
  * thinner shape than `SignalWithOutcome` — keep it separate.
+ *
+ * Phase 18.2: `accountMode` is carried through so downstream analytics
+ * can split demo vs real performance instead of silently combining.
  */
 export interface JournalOutcome {
   pair: string;
@@ -109,6 +112,7 @@ export interface JournalOutcome {
   resultPips: number | null;
   resultAmount: number | null;
   status: "open" | "closed";
+  accountMode: "demo" | "real";
 }
 
 // ── Backtest source ───────────────────────────────────────────────
@@ -216,21 +220,31 @@ export async function fetchLiveSignalsWithOutcomes(
 
 // ── Journal source ────────────────────────────────────────────────
 
+/**
+ * Phase 18.2: `mode` scopes the query to demo-only or real-only.
+ * Omitting `mode` keeps the legacy combined behaviour for callers
+ * that explicitly want both — they must then group by `accountMode`
+ * themselves before rendering any aggregate.
+ */
 export async function fetchJournalOutcomes(
   client: SupabaseClient,
   userId: string,
   range: { since: string; until?: string },
+  mode?: "demo" | "real",
 ): Promise<JournalOutcome[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = client as any;
 
   let query = sb
     .from("trade_journal_entries")
-    .select("pair, direction, opened_at, closed_at, result_pips, result_amount, status")
+    .select(
+      "pair, direction, opened_at, closed_at, result_pips, result_amount, status, account_mode",
+    )
     .eq("user_id", userId)
     .gte("opened_at", range.since)
     .order("opened_at", { ascending: true });
   if (range.until) query = query.lt("opened_at", range.until);
+  if (mode) query = query.eq("account_mode", mode);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -242,6 +256,7 @@ export async function fetchJournalOutcomes(
     result_pips: number | null;
     result_amount: number | null;
     status: string;
+    account_mode: string | null;
   }>;
 
   return rows.map((r) => ({
@@ -252,6 +267,7 @@ export async function fetchJournalOutcomes(
     resultPips: r.result_pips,
     resultAmount: r.result_amount,
     status: r.status === "closed" ? "closed" : "open",
+    accountMode: r.account_mode === "real" ? "real" : "demo",
   }));
 }
 

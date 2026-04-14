@@ -655,6 +655,7 @@ export type Database = {
       }
       trade_journal_entries: {
         Row: {
+          account_mode: string
           closed_at: string | null
           confidence: number | null
           created_at: string
@@ -682,6 +683,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_mode?: string
           closed_at?: string | null
           confidence?: number | null
           created_at?: string
@@ -709,6 +711,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_mode?: string
           closed_at?: string | null
           confidence?: number | null
           created_at?: string

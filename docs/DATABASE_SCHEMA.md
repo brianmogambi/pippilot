@@ -358,11 +358,12 @@ User's personal trade diary for tracking performance and learning.
 | `screenshot_url` | text | Yes | — | Chart screenshot URL |
 | `opened_at` | timestamptz | No | `now()` | When trade was opened |
 | `closed_at` | timestamptz | Yes | — | When trade was closed |
-| `executed_trade_id` | uuid | Yes | — | Optional FK to `executed_trades(id)`. Phase 1. |
+| `executed_trade_id` | uuid | Yes | — | Optional FK to `executed_trades(id)`. Phase 18.1. |
+| `account_mode` | text | No | `'demo'` | Demo vs real (`'demo'` \| `'real'`). Phase 18.2. |
 | `created_at` | timestamptz | No | `now()` | Record created |
 | `updated_at` | timestamptz | No | `now()` | Record updated |
 
-Pre-Phase-1 journal rows and manual journal-only entries have `executed_trade_id = null`.
+Pre-Phase-18.1 journal rows and manual journal-only entries have `executed_trade_id = null`. `account_mode` is denormalized from the user's trading account at write time so journal queries, filters, and dashboard stats can split demo and real performance without joining `executed_trades`; legacy rows default to `'demo'` (the safest bucket that cannot mislabel a real-money trade as a practice trade).
 
 ### Relationships
 - `executed_trade_id` → `executed_trades(id)` `on delete set null`

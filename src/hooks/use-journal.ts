@@ -2,77 +2,103 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMemo } from "react";
-import type { JournalEntry, JournalStats } from "@/types/trading";
+import type { AccountMode, JournalEntry, JournalStats } from "@/types/trading";
 import { pipMultiplier } from "@/lib/pip-value";
 import { toast } from "sonner";
 
-export function useJournalEntries() {
+/**
+ * Phase 18.2: optional demo/real mode filter. When a mode is passed
+ * the query scopes to `account_mode = mode`; when omitted the result
+ * is the unfiltered combined view. Callers that render aggregate
+ * stats MUST pass a mode so demo and real performance are never
+ * silently combined.
+ */
+export function useJournalEntries(mode?: AccountMode) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["journal-entries", user?.id],
+    queryKey: ["journal-entries", user?.id, mode ?? "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("trade_journal_entries")
         .select("*")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
+      if (mode) query = query.eq("account_mode", mode);
+      const { data, error } = await query;
       if (error) throw error;
-      return data as JournalEntry[];
-    },
-    enabled: !!user,
-  });
-}
-
-export function useDashboardJournal(limit = 3) {
-  const { user } = useAuth();
-
-  return useQuery({
-    queryKey: ["dashboard-journal", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("trade_journal_entries")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(limit);
       return (data ?? []) as JournalEntry[];
     },
     enabled: !!user,
   });
 }
 
-export function useJournalByPair(pair: string, limit = 5) {
+export function useDashboardJournal(limit = 3, mode?: AccountMode) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["journal-pair", user?.id, pair],
+    queryKey: ["dashboard-journal", user?.id, mode ?? "all", limit],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
+        .from("trade_journal_entries")
+        .select("*")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (mode) query = query.eq("account_mode", mode);
+      const { data } = await query;
+      return (data ?? []) as JournalEntry[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useJournalByPair(pair: string, limit = 5, mode?: AccountMode) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["journal-pair", user?.id, pair, mode ?? "all", limit],
+    queryFn: async () => {
+      let query = supabase
         .from("trade_journal_entries")
         .select("*")
         .eq("user_id", user!.id)
         .eq("pair", pair)
         .order("opened_at", { ascending: false })
         .limit(limit);
+      if (mode) query = query.eq("account_mode", mode);
+      const { data, error } = await query;
       if (error) throw error;
-      return data as JournalEntry[];
+      return (data ?? []) as JournalEntry[];
     },
     enabled: !!user && !!pair,
   });
 }
 
-export function useDashboardJournalStats() {
+/**
+ * Phase 18.2: a mode is REQUIRED. Pass the default account mode from
+ * `useDefaultAccountMode()` on the dashboard — the dashboard showed
+ * combined stats before, which violated the "do not silently mix demo
+ * and real" rule.
+ */
+export function useDashboardJournalStats(mode: AccountMode) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["journal-stats", user?.id],
+    queryKey: ["journal-stats", user?.id, mode],
     queryFn: async () => {
-      const { data } = await supabase.from("trade_journal_entries").select("result_pips, status").eq("user_id", user!.id);
+      const { data } = await supabase
+        .from("trade_journal_entries")
+        .select("result_pips, status")
+        .eq("user_id", user!.id)
+        .eq("account_mode", mode);
       if (!data || data.length === 0) return null;
       const closed = data.filter((e) => e.status === "closed");
       const wins = closed.filter((e) => (Number(e.result_pips) ?? 0) > 0).length;
-      const totalPips = closed.reduce((sum, e) => sum + (Number(e.result_pips) ?? 0), 0);
+      const totalPips = closed.reduce(
+        (sum, e) => sum + (Number(e.result_pips) ?? 0),
+        0,
+      );
       return {
         total: data.length,
         winRate: closed.length > 0 ? Math.round((wins / closed.length) * 100) : 0,

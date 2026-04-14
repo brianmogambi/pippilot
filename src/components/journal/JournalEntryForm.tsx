@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Star } from "lucide-react";
 import { useCreateJournalEntry, useUpdateJournalEntry } from "@/hooks/use-journal";
+import { useDefaultAccountMode } from "@/hooks/use-account";
+import type { AccountMode } from "@/types/trading";
 
 const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "NZD/USD", "EUR/GBP", "GBP/JPY", "EUR/JPY", "AUD/JPY"];
 const SETUP_TYPES = ["breakout", "pullback", "reversal", "range", "trend_continuation"];
@@ -16,6 +18,7 @@ const emptyForm = {
   pair: "", direction: "long", entry_price: "", exit_price: "", stop_loss: "", take_profit: "",
   result_pips: "", result_amount: "", lot_size: "", notes: "", followed_plan: true, status: "closed",
   setup_type: "", confidence: 0, setup_reasoning: "", lesson_learned: "", emotional_notes: "",
+  account_mode: "demo" as AccountMode,
 };
 
 interface Props {
@@ -29,6 +32,7 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
   const [internalOpen, setInternalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
 
+  const defaultMode = useDefaultAccountMode();
   const createMutation = useCreateJournalEntry();
   const updateMutation = useUpdateJournalEntry();
 
@@ -57,11 +61,17 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
         setup_reasoning: entry.setup_reasoning ?? "",
         lesson_learned: entry.lesson_learned ?? "",
         emotional_notes: entry.emotional_notes ?? "",
+        account_mode: ((entry.account_mode as AccountMode) ?? defaultMode),
       });
+    } else if (!entry && open) {
+      // Phase 18.2: new-entry dialog pre-fills mode from the user's
+      // default account so a real-account user isn't forced to pick
+      // the mode every time.
+      setForm({ ...emptyForm, account_mode: defaultMode });
     } else if (!entry && !open) {
-      setForm(emptyForm);
+      setForm({ ...emptyForm, account_mode: defaultMode });
     }
-  }, [entry, open]);
+  }, [entry, open, defaultMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +94,7 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
       setup_reasoning: form.setup_reasoning || null,
       lesson_learned: form.lesson_learned || null,
       emotional_notes: form.emotional_notes || null,
+      account_mode: form.account_mode,
     };
 
     if (isEdit) {
@@ -212,7 +223,7 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
             <Textarea value={form.emotional_notes} onChange={(e) => setForm({ ...form, emotional_notes: e.target.value })} placeholder="How did you feel? Did you stick to rules?" className="min-h-[60px]" />
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <Checkbox id="followed_plan" checked={form.followed_plan} onCheckedChange={(c) => setForm({ ...form, followed_plan: !!c })} />
               <Label htmlFor="followed_plan" className="text-sm">Followed trading plan</Label>
@@ -224,6 +235,19 @@ export default function JournalEntryForm({ onSuccess, entry, open: controlledOpe
                 <SelectItem value="closed">Closed</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm">Account</Label>
+              <Select
+                value={form.account_mode}
+                onValueChange={(v) => setForm({ ...form, account_mode: v as AccountMode })}
+              >
+                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="demo">Demo</SelectItem>
+                  <SelectItem value="real">Real</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <Button type="submit" className="w-full" disabled={loading || !form.pair || !form.entry_price}>

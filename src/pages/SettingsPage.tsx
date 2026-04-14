@@ -8,7 +8,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Save, User, BarChart3, Shield, Bell, Palette, TrendingUp } from "lucide-react";
+import {
+  Save,
+  User,
+  BarChart3,
+  Shield,
+  Bell,
+  Palette,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import {
+  useTradingAccounts,
+  useUpdateTradingAccount,
+} from "@/hooks/use-account";
+import AccountModeBadge from "@/components/ui/account-mode-badge";
+import type { AccountMode } from "@/types/trading";
 
 const EXPERIENCE_OPTIONS = [
   { value: "beginner", label: "Beginner", desc: "New to forex — guided recommendations" },
@@ -86,6 +101,10 @@ export default function SettingsPage() {
   const { profile, user, refetchProfile } = useAuth();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+
+  // Phase 18.2: trading accounts list for the Accounts section.
+  const { data: accounts = [] } = useTradingAccounts();
+  const updateAccount = useUpdateTradingAccount();
 
   const [displayName, setDisplayName] = useState("");
   const [experience, setExperience] = useState("beginner");
@@ -235,7 +254,70 @@ export default function SettingsPage() {
         </div>
       </SectionCard>
 
-      {/* Section 2: Trading Preferences */}
+      {/* Section 2: Trading Accounts (Phase 18.2) */}
+      <SectionCard icon={Wallet} title="Trading Accounts">
+        <p className="text-xs text-muted-foreground">
+          Mark each account as <span className="font-medium text-warning">Demo</span> or{" "}
+          <span className="font-medium text-bullish">Real</span>. PipPilot keeps demo and real
+          performance separate across the journal, analytics, and dashboard so practice trades
+          never pollute your real stats.
+        </p>
+        {accounts.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            No trading accounts yet. One will be created automatically on your first trade.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {accounts.map((acct) => {
+              const currentMode = (acct.account_mode as AccountMode) ?? "demo";
+              return (
+                <div
+                  key={acct.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {acct.account_name}
+                      </span>
+                      {acct.is_default && (
+                        <span className="text-[10px] rounded bg-primary/15 text-primary px-1.5 py-0.5 uppercase tracking-wider">
+                          Default
+                        </span>
+                      )}
+                      <AccountModeBadge mode={currentMode} />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {acct.broker_name || "No broker"} · {acct.account_currency}{" "}
+                      {Number(acct.balance).toLocaleString()}
+                    </p>
+                  </div>
+                  <Select
+                    value={currentMode}
+                    disabled={updateAccount.isPending}
+                    onValueChange={(v) =>
+                      updateAccount.mutate({
+                        id: acct.id,
+                        payload: { account_mode: v as AccountMode },
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-[110px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="demo">Demo</SelectItem>
+                      <SelectItem value="real">Real</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Section 3: Trading Preferences */}
       <SectionCard icon={BarChart3} title="Trading Preferences">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Default Timeframe</Label>

@@ -1,7 +1,9 @@
 import { useState, useMemo } from "react";
-import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3, PlusCircle } from "lucide-react";
+import { BookOpen, ArrowUpRight, ArrowDownRight, Trophy, Target, CheckCircle2, XCircle, Star, TrendingUp, TrendingDown, BarChart3, Link2 } from "lucide-react";
 import { useJournalEntries, useJournalStats } from "@/hooks/use-journal";
 import StatusBadge from "@/components/ui/status-badge";
+import AccountModeBadge from "@/components/ui/account-mode-badge";
+import type { AccountMode } from "@/types/trading";
 import StatCard from "@/components/ui/stat-card";
 import EmptyState from "@/components/ui/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,7 +20,13 @@ export default function Journal() {
   const [editOpen, setEditOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
 
-  const { data: entries = [], isLoading, refetch } = useJournalEntries();
+  // Phase 18.2: pass the active mode filter down to the query so we never
+  // pull the full combined list when the user has picked a mode.
+  const queryMode: AccountMode | undefined =
+    filters.accountMode === "demo" || filters.accountMode === "real"
+      ? (filters.accountMode as AccountMode)
+      : undefined;
+  const { data: entries = [], isLoading, refetch } = useJournalEntries(queryMode);
   const stats = useJournalStats(entries);
 
   const filtered = useMemo(() => {
@@ -27,6 +35,8 @@ export default function Journal() {
       if (filters.setupType && e.setup_type !== filters.setupType) return false;
       if (filters.result === "win" && !((Number(e.result_pips) ?? 0) > 0)) return false;
       if (filters.result === "loss" && !((Number(e.result_pips) ?? 0) < 0)) return false;
+      if (filters.source === "linked" && !e.executed_trade_id) return false;
+      if (filters.source === "manual" && e.executed_trade_id) return false;
       if (filters.dateFrom && new Date(e.opened_at) < new Date(filters.dateFrom)) return false;
       if (filters.dateTo && new Date(e.opened_at) > new Date(filters.dateTo + "T23:59:59")) return false;
       return true;
@@ -86,6 +96,7 @@ export default function Journal() {
               <TableHeader className="sticky top-0 z-10">
                 <TableRow className="bg-muted/30">
                   <TableHead className="text-xs">Date</TableHead>
+                  <TableHead className="text-xs">Mode</TableHead>
                   <TableHead className="text-xs">Pair</TableHead>
                   <TableHead className="text-xs">Direction</TableHead>
                   <TableHead className="text-xs">Setup</TableHead>
@@ -101,7 +112,20 @@ export default function Journal() {
                 {filtered.map((entry) => (
                   <TableRow key={entry.id} className="cursor-pointer hover:bg-muted/40 transition-colors" onClick={() => handleRowClick(entry)}>
                     <TableCell className="text-muted-foreground text-xs">{new Date(entry.opened_at).toLocaleDateString()}</TableCell>
-                    <TableCell className="font-medium text-foreground">{entry.pair}</TableCell>
+                    <TableCell>
+                      <AccountModeBadge mode={entry.account_mode as AccountMode} />
+                    </TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        {entry.pair}
+                        {entry.executed_trade_id && (
+                          <Link2
+                            className="h-3 w-3 text-primary"
+                            aria-label="Linked to AI signal"
+                          />
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <StatusBadge variant={entry.direction === "long" ? "bullish" : "bearish"}>
                         {entry.direction === "long" ? <ArrowUpRight className="h-2.5 w-2.5 mr-0.5" /> : <ArrowDownRight className="h-2.5 w-2.5 mr-0.5" />}
