@@ -4,29 +4,74 @@ import { ArrowLeft, ArrowUpRight, ArrowDownRight, Ban, Info, Loader2, Zap } from
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Signal } from "@/types/trading";
+import type { Signal, PairAnalysis, PairAnalysisRow, CandleTimeframe, Verdict } from "@/types/trading";
 import RiskCalculator from "@/components/calculator/RiskCalculator";
 import { Button } from "@/components/ui/button";
 import TakeTradeDialog from "@/components/trades/TakeTradeDialog";
+import CandlestickChart from "@/components/chart/CandlestickChart";
+import { useCandlesWithFetch } from "@/hooks/use-candles";
+import { useMarketData } from "@/hooks/use-market-data";
+import { rowToAnalysis } from "@/hooks/_shared/row-to-analysis";
+
+/**
+ * Map a signal's `timeframe` column (stored as "H1"/"H4"/"D1" by the
+ * signal engine) to the lowercase enum used by `ohlcv_candles`. Falls
+ * back to "1h" for anything unrecognized so the chart always has
+ * something to request.
+ */
+function normalizeSignalTimeframe(tf: string | null | undefined): CandleTimeframe {
+  if (!tf) return "1h";
+  const t = tf.toLowerCase();
+  if (t === "5m" || t === "m5") return "5m";
+  if (t === "15m" || t === "m15") return "15m";
+  if (t === "h1" || t === "1h") return "1h";
+  if (t === "h4" || t === "4h") return "4h";
+  if (t === "d1" || t === "1d") return "1d";
+  return "1h";
+}
+
+interface SignalWithAnalysis extends Signal {
+  analysis: PairAnalysis | null;
+}
 
 export default function SignalDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const [takeTradeOpen, setTakeTradeOpen] = useState(false);
 
-  const { data: signal, isLoading, error } = useQuery({
+  const { data: signal, isLoading, error } = useQuery<SignalWithAnalysis>({
     queryKey: ["signal", id],
     queryFn: async () => {
+      // Join the FK-linked pair_analyses row so the chart price-line
+      // overlays (entry zone, SL, TP1-3) and the AI explanation come
+      // from the exact analysis this signal was generated from, not
+      // the latest one for that pair name.
       const { data, error } = await supabase
         .from("signals")
-        .select("*")
+        .select("*, pair_analyses!pair_analyses_signal_id_fkey(*)")
         .eq("id", id!)
         .single();
       if (error) throw error;
-      return data as Signal;
+
+      const { pair_analyses: joined, ...signalCols } = data as Signal & {
+        pair_analyses: PairAnalysisRow | PairAnalysisRow[] | null;
+      };
+      const analysisRow = Array.isArray(joined) ? joined[0] ?? null : joined;
+      return {
+        ...(signalCols as Signal),
+        analysis: analysisRow ? rowToAnalysis(analysisRow) : null,
+      };
     },
     enabled: !!user && !!id,
   });
+
+  const dbTimeframe = normalizeSignalTimeframe(signal?.timeframe);
+  const {
+    data: candles = [],
+    isLoading: loadingCandles,
+    isFetching: fetchingCandles,
+  } = useCandlesWithFetch(signal?.pair ?? "", dbTimeframe, 300);
+  const { data: marketData } = useMarketData(signal?.pair ?? "");
 
   if (isLoading) {
     return (
@@ -89,12 +134,26 @@ export default function SignalDetail() {
       <div className="grid md:grid-cols-2 gap-6">
         {/* Left Column */}
         <div className="space-y-4">
-          {/* Chart Placeholder */}
-          <div className="rounded-lg border border-border bg-card aspect-video flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <Activity className="h-10 w-10 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">Chart integration coming soon</p>
-            </div>
+          {/* Real candlestick chart with entry / SL / TP overlays */}
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <CandlestickChart
+              candles={candles}
+              analysis={signal.analysis}
+              marketData={marketData ?? null}
+              signals={[signal]}
+              isLoading={loadingCandles}
+              isFetching={fetchingCandles}
+              setupLabel={
+                signal.setup_type && signal.direction
+                  ? {
+                      setupType: signal.setup_type,
+                      direction: signal.direction as "long" | "short",
+                      confidence: signal.confidence,
+                      verdict: signal.verdict as Verdict,
+                    }
+                  : null
+              }
+            />
           </div>
 
           {/* Price Levels */}
@@ -146,13 +205,5 @@ export default function SignalDetail() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Activity({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />
-    </svg>
   );
 }
