@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
@@ -9,8 +10,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
+import { TermTooltip } from "@/components/ui/term-tooltip";
 import TakeTradeDialog from "@/components/trades/TakeTradeDialog";
 import type { Freshness } from "@/lib/data-freshness";
+import {
+  getSignalAge,
+  getAccountSuitability,
+  getPrimaryRisk,
+  getBeginnerFriendlyTag,
+} from "@/lib/signal-presentation";
+import { useRecentSetupLosses } from "@/hooks/use-journal";
+import { useBeginnerMode } from "@/hooks/use-beginner-mode";
+import type { GlossaryTerm } from "@/lib/glossary";
+import { Calculator, Sparkles } from "lucide-react";
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -31,6 +43,19 @@ interface Props {
 
 export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props) {
   const [takeTradeOpen, setTakeTradeOpen] = useState(false);
+  // Phase 5 (improvement plan): how many recent losses the user has
+  // journaled on this pair+setup. >= 2 surfaces the caution strip.
+  // Hook must come before any conditional return — pass nullable
+  // values so it self-disables when no signal is selected.
+  const { count: recentLossCount } = useRecentSetupLosses(
+    signal?.pair ?? null,
+    signal?.setup_type ?? null,
+  );
+  // Phase 8: beginner-friendly badge is gated on `useBeginnerMode()` —
+  // non-beginners don't need the extra label. Hook must run on every
+  // render so it's called above the early return below.
+  const isBeginner = useBeginnerMode();
+
   if (!signal) return null;
 
   const isLong = signal.direction === "long";
@@ -38,6 +63,14 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
   const analysis = signal.analysis;
   const quality = analysis?.setupQuality ?? null;
   const isAggressive = signal.confidence >= 75;
+
+  // Phase 1 (improvement plan): trust signals derived from the
+  // already-persisted analysis fields. Same heuristics used on the
+  // dashboard top-trade card and the mobile signal card.
+  const age = getSignalAge(signal);
+  const suitability = getAccountSuitability(signal);
+  const primaryRisk = getPrimaryRisk(signal);
+  const beginnerTag = getBeginnerFriendlyTag(signal);
 
   // Phase 8/9: derive explanation heading + badge from persisted metadata.
   const explanationStatus = analysis?.explanationStatus ?? null;
@@ -82,7 +115,7 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
               </StatusBadge>
             </div>
           </div>
-          <SheetDescription className="flex items-center gap-2 mt-1">
+          <SheetDescription className="flex items-center gap-2 mt-1 flex-wrap">
             {isNoTrade ? (
               <span className="flex items-center gap-1 text-warning font-medium">
                 <Ban className="h-3.5 w-3.5" /> No Trade
@@ -103,18 +136,66 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
                 <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Conservative</span>
               )}
             </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-[11px] text-muted-foreground">{age.label}</span>
+            {age.staleness !== "fresh" && (
+              <StatusBadge
+                variant={age.staleness === "stale" ? "bearish" : "pending"}
+                title={`Generated ${age.label} — market conditions may have shifted.`}
+              >
+                {age.staleness === "stale" ? "Stale" : "Aging"}
+              </StatusBadge>
+            )}
+            {suitability.level === "real" && (
+              <StatusBadge variant="bullish" title={suitability.reason}>Real-account suitable</StatusBadge>
+            )}
+            {suitability.level === "demo_only" && (
+              <StatusBadge variant="pending" title={suitability.reason}>Demo only</StatusBadge>
+            )}
+            {/* Phase 8 (improvement plan): beginner-only badge — fires
+                when the engine's heuristic agrees the setup is strong
+                enough to be a beginner-friendly pick (A/A+ quality,
+                70%+ confidence, R:R >= 2). Gated on isBeginner so the
+                trust-signal row stays compact for advanced users. */}
+            {isBeginner && beginnerTag.friendly && (
+              <StatusBadge
+                variant="bullish"
+                className="gap-1"
+                title={beginnerTag.reason}
+              >
+                <Sparkles className="h-2.5 w-2.5" /> Beginner-friendly
+              </StatusBadge>
+            )}
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 pt-5">
-          {/* Phase 18.3: Take Trade CTA (hidden for no_trade signals) */}
+          {/* Phase 18.3: Take Trade CTA (hidden for no_trade signals).
+              Phase 6 (improvement plan): pair the primary action with a
+              "Calculate lot size" shortcut so a beginner can step into
+              the full Calculator (with its education sidebar) before
+              committing. The button is the primary; the link is the
+              alternate path. */}
           {!isNoTrade && (
-            <Button
-              className="w-full gap-1.5"
-              onClick={() => setTakeTradeOpen(true)}
-            >
-              <Zap className="h-4 w-4" /> Take This Trade
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button
+                className="flex-1 gap-1.5"
+                onClick={() => setTakeTradeOpen(true)}
+              >
+                <Zap className="h-4 w-4" /> Take This Trade
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="gap-1.5"
+              >
+                <Link
+                  to={`/calculator?pair=${encodeURIComponent(signal.pair)}&entry=${signal.entry_price}&sl=${signal.stop_loss}`}
+                >
+                  <Calculator className="h-4 w-4" /> Calculate lot size
+                </Link>
+              </Button>
+            </div>
           )}
 
           {/* No Trade Warning */}
@@ -130,15 +211,71 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
             </div>
           )}
 
+          {/* Phase 1 (improvement plan): top risk callout — promotes the
+              first reason-against from the analysis so users see what
+              could go wrong before they study the price levels. */}
+          {!isNoTrade && primaryRisk && (
+            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-warning font-semibold mb-1">
+                    Why this could fail
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{primaryRisk}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Phase 7 (improvement plan): stale-signal banner — mirrors
+              the dashboard's TopTradeCard banner so a user reading the
+              full drawer sees the same warning. */}
+          {age.staleness === "stale" && (
+            <div className="rounded-lg border border-bearish/30 bg-bearish/[0.06] p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-bearish mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-bearish font-semibold mb-1">
+                    Stale signal
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    This signal was generated {age.label}. Market conditions may have shifted — re-check the chart and the price levels before acting on it.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Phase 5 (improvement plan): recurring-struggle caution.
+              Surfaces only when the user has 2+ journaled losses on
+              this pair+setup in the last 30 days. Doesn't block — just
+              raises the bar for taking the trade. */}
+          {!isNoTrade && recentLossCount >= 2 && (
+            <div className="rounded-lg border border-bearish/30 bg-bearish/[0.06] p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-bearish mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-bearish font-semibold mb-1">
+                    You've struggled here recently
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {recentLossCount} losing {signal.setup_type || "setup"} trade{recentLossCount === 1 ? "" : "s"} on {signal.pair} in the last 30 days. Re-read your journal lessons before sizing this one.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Price Levels */}
           <Section title="Price Levels">
             <div className="grid grid-cols-2 gap-3">
               <LevelRow label="Entry" value={signal.entry_price} />
-              <LevelRow label="Stop Loss" value={signal.stop_loss} className="text-bearish" />
-              <LevelRow label="TP1" value={signal.take_profit_1} className="text-bullish" />
-              <LevelRow label="TP2" value={signal.take_profit_2 ?? "—"} className="text-bullish" />
-              <LevelRow label="TP3" value={signal.take_profit_3 ?? "—"} className="text-bullish" />
-              <LevelRow label="R:R" value={`${signal.riskReward}R`} />
+              <LevelRow label="Stop Loss" term="stop_loss" value={signal.stop_loss} className="text-bearish" />
+              <LevelRow label="TP1" term="take_profit" value={signal.take_profit_1} className="text-bullish" />
+              <LevelRow label="TP2" term="take_profit" value={signal.take_profit_2 ?? "—"} className="text-bullish" />
+              <LevelRow label="TP3" term="take_profit" value={signal.take_profit_3 ?? "—"} className="text-bullish" />
+              <LevelRow label="R:R" term="risk_reward" value={`${signal.riskReward}R`} />
             </div>
           </Section>
 
@@ -146,11 +283,15 @@ export default function SignalDetailDrawer({ signal, open, onOpenChange }: Props
           <Section title="Setup Info">
             <div className="space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Setup Type</span>
+                <span className="text-muted-foreground">
+                  <TermTooltip term="setup_quality">Setup Type</TermTooltip>
+                </span>
                 <span className="text-foreground font-medium">{signal.setup_type || analysis?.setupType || "—"}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Confidence</span>
+                <span className="text-muted-foreground">
+                  <TermTooltip term="confidence">Confidence</TermTooltip>
+                </span>
                 <div className="flex items-center gap-2">
                   <div className="w-16 bg-muted rounded-full h-1.5">
                     <div
@@ -282,10 +423,23 @@ function Section({
   );
 }
 
-function LevelRow({ label, value, className }: { label: string; value: string | number; className?: string }) {
+function LevelRow({
+  label,
+  value,
+  className,
+  term,
+}: {
+  label: string;
+  value: string | number;
+  className?: string;
+  /** Optional glossary term — when present the label hover-explains itself. */
+  term?: GlossaryTerm;
+}) {
   return (
     <div className="flex justify-between items-center">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-[11px] text-muted-foreground">
+        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+      </span>
       <span className={`text-xs font-mono font-medium ${className || "text-foreground"}`}>{value}</span>
     </div>
   );

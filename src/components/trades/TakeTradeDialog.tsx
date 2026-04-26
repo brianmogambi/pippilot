@@ -28,10 +28,17 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useTradingAccounts, useRiskProfile } from "@/hooks/use-account";
 import { useCreateExecutedTrade } from "@/hooks/use-executed-trades";
 import { usePipValue } from "@/hooks/use-pip-value";
-import { evaluateTrade } from "@/lib/risk-engine";
+import { useDailyRiskUsed } from "@/hooks/use-daily-risk";
+import {
+  evaluateTrade,
+  calculateMoneyAtRiskUSD,
+  calculatePipDistance,
+} from "@/lib/risk-engine";
 import {
   buildExecutedTradeFromSignal,
   buildManualExecutedTrade,
@@ -108,6 +115,20 @@ export default function TakeTradeDialog({
   const createMutation = useCreateExecutedTrade();
 
   const [form, setForm] = useState<FormState>(emptyForm);
+  // Phase 2 (improvement plan): conservative-mode override scoped to
+  // the dialog session so a beginner can halve the suggestion without
+  // changing their saved profile. Re-seeds from the profile each time
+  // the dialog opens.
+  const [conservativeOverride, setConservativeOverride] = useState(false);
+  // Phase 7 (improvement plan): one-time-per-session acknowledgment
+  // that the analysis isn't financial advice. Stored on sessionStorage
+  // so the user only sees the friction once per browsing session, not
+  // on every trade. The flag drives both the local state seed and the
+  // post-submit persist.
+  const [acknowledged, setAcknowledged] = useState(() => {
+    if (typeof sessionStorage === "undefined") return true;
+    return sessionStorage.getItem("pippilot.takeTrade.acknowledged") === "1";
+  });
 
   // Phase 18.10: live pip value for the pair the user is opening in.
   // Falls back to a static estimate when market data isn't loaded yet
@@ -141,7 +162,8 @@ export default function TakeTradeDialog({
       lot_size: "",
       notes: "",
     });
-  }, [open, signal, defaultAccount?.id]);
+    setConservativeOverride(riskProfile?.conservative_mode ?? false);
+  }, [open, signal, defaultAccount?.id, riskProfile?.conservative_mode]);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === form.account_id),
@@ -174,7 +196,7 @@ export default function TakeTradeDialog({
         riskPerTradePct: riskTargetPct,
         maxDailyLossPct: Number(riskProfile?.max_daily_loss_pct ?? 5),
         maxTotalOpenRiskPct: Number(riskProfile?.max_total_open_risk_pct ?? 10),
-        conservativeMode: riskProfile?.conservative_mode ?? false,
+        conservativeMode: conservativeOverride,
       },
       trade: {
         pair: form.symbol,
@@ -203,7 +225,7 @@ export default function TakeTradeDialog({
     riskTargetPct,
     riskProfile?.max_daily_loss_pct,
     riskProfile?.max_total_open_risk_pct,
-    riskProfile?.conservative_mode,
+    conservativeOverride,
   ]);
 
   // Over-limit warning: fires when the user's typed lot size exceeds
@@ -221,16 +243,79 @@ export default function TakeTradeDialog({
     };
   }, [suggestion, form.lot_size, riskTargetPct]);
 
+  // Phase 2 (improvement plan): scope the daily-risk gauge to the
+  // selected account (not the user's default) so the preview reflects
+  // the real exposure for THIS trade's account.
+  const selectedBalance = Number(selectedAccount?.balance ?? 0);
+  const dailyRisk = useDailyRiskUsed({
+    accountMode: selectedMode,
+    balance: selectedBalance || undefined,
+  });
+  const maxDailyLossPct = Number(riskProfile?.max_daily_loss_pct ?? 5);
+
+  // Live risk preview: dollar loss if SL is hit, computed from the
+  // user's TYPED lot size (or the suggestion if they haven't typed
+  // one yet). This is the figure a beginner needs to internalise
+  // BEFORE submitting — abstract percentages aren't enough.
+  const livePreview = useMemo(() => {
+    if (!selectedAccount || !form.symbol) return null;
+    const entry = Number(form.actual_entry_price);
+    const sl = Number(form.actual_stop_loss);
+    if (!entry || !sl || entry === sl) return null;
+
+    const typedLot = Number(form.lot_size);
+    const effectiveLot =
+      typedLot > 0 ? typedLot : suggestion?.lotSize ?? 0;
+    if (effectiveLot <= 0) return null;
+
+    const pipDistance = calculatePipDistance(form.symbol, entry, sl);
+    const riskUsd = calculateMoneyAtRiskUSD(
+      effectiveLot,
+      pipDistance,
+      pipValueUsd,
+    );
+    const balance = selectedBalance || 1; // avoid divide-by-zero
+    const tradeRiskPct = (riskUsd / balance) * 100;
+    const projectedDailyPct = dailyRisk.riskUsedPct + tradeRiskPct;
+    const wouldExceedDailyCap = projectedDailyPct > maxDailyLossPct;
+
+    return {
+      lotSize: effectiveLot,
+      lotSource: typedLot > 0 ? ("typed" as const) : ("suggested" as const),
+      riskUsd,
+      tradeRiskPct,
+      projectedDailyPct,
+      remainingPct: Math.max(0, maxDailyLossPct - dailyRisk.riskUsedPct),
+      wouldExceedDailyCap,
+    };
+  }, [
+    selectedAccount,
+    selectedBalance,
+    form.symbol,
+    form.actual_entry_price,
+    form.actual_stop_loss,
+    form.lot_size,
+    pipValueUsd,
+    suggestion?.lotSize,
+    dailyRisk.riskUsedPct,
+    maxDailyLossPct,
+  ]);
+
   const isManual = !signal;
   const canSubmit =
     !!form.account_id &&
     !!form.symbol &&
     !!form.actual_entry_price &&
-    !createMutation.isPending;
+    !createMutation.isPending &&
+    !(livePreview?.wouldExceedDailyCap ?? false) &&
+    acknowledged;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || !selectedAccount) return;
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("pippilot.takeTrade.acknowledged", "1");
+    }
 
     // Phase 18.9: payload construction lives in the pure helper so
     // the "signal snapshot correctness" contract can be unit-tested
@@ -511,7 +596,96 @@ export default function TakeTradeDialog({
                   </p>
                 )
               )}
+
+              {/* Phase 2 (improvement plan): conservative-mode toggle.
+                  Halves the suggestion in one click — recommended for
+                  beginners while building consistency. */}
+              <div className="flex items-center justify-between rounded-md border border-border bg-muted/20 px-2.5 py-2">
+                <div className="flex flex-col">
+                  <Label htmlFor="conservative-mode" className="text-[11px] font-medium cursor-pointer">
+                    Conservative mode
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">
+                    Halves the suggested lot — useful while building consistency.
+                  </span>
+                </div>
+                <Switch
+                  id="conservative-mode"
+                  checked={conservativeOverride}
+                  onCheckedChange={setConservativeOverride}
+                />
+              </div>
             </div>
+
+            {/* Phase 2 (improvement plan): Risk preview. Translates the
+                abstract "1% risk" into the actual dollar loss for the
+                user's account, and shows whether they have daily-budget
+                room left. Hard-blocks submit when over cap. */}
+            {livePreview && (
+              <div
+                className={`rounded-lg border p-3 space-y-2 ${
+                  livePreview.wouldExceedDailyCap
+                    ? "border-bearish/40 bg-bearish/[0.06]"
+                    : livePreview.tradeRiskPct > riskTargetPct * 1.5
+                      ? "border-warning/30 bg-warning/[0.06]"
+                      : "border-primary/20 bg-primary/[0.04]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    <ShieldCheck className="h-3 w-3 text-primary" />
+                    Risk preview
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <AccountModeBadge mode={selectedMode} size="sm" />
+                    <span className="text-[10px] text-muted-foreground">
+                      ${selectedBalance.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Potential loss if SL hits
+                    </p>
+                    <p className="font-mono text-sm font-semibold text-foreground">
+                      ${livePreview.riskUsd.toFixed(2)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {livePreview.tradeRiskPct.toFixed(2)}% of account
+                      {livePreview.lotSource === "suggested" && " (using suggestion)"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Daily risk used today
+                    </p>
+                    <p
+                      className={`font-mono text-sm font-semibold ${
+                        livePreview.wouldExceedDailyCap ? "text-bearish" : "text-foreground"
+                      }`}
+                    >
+                      {livePreview.projectedDailyPct.toFixed(2)}% / {maxDailyLossPct}%
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {dailyRisk.riskUsedPct.toFixed(2)}% open · {livePreview.remainingPct.toFixed(2)}% remaining
+                    </p>
+                  </div>
+                </div>
+
+                {livePreview.wouldExceedDailyCap && (
+                  <div className="flex items-start gap-1.5 text-[11px] text-bearish border-t border-bearish/20 pt-2 mt-1">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span className="leading-snug">
+                      <span className="font-semibold">Blocked:</span> this trade would push your daily risk to{" "}
+                      {livePreview.projectedDailyPct.toFixed(1)}%, past your{" "}
+                      {maxDailyLossPct}% profile cap. Reduce the lot size or wait until tomorrow.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label className="text-xs">Notes</Label>
@@ -523,12 +697,41 @@ export default function TakeTradeDialog({
               />
             </div>
 
+            {/* Phase 7 (improvement plan): one-time-per-session
+                acknowledgment that the analysis is educational, not
+                advice. Hidden after the first acknowledgment so it
+                doesn't friction every subsequent trade in the same
+                session. */}
+            {!acknowledged && (
+              <label className="flex items-start gap-2 cursor-pointer rounded-md border border-border bg-muted/30 p-2.5">
+                <Checkbox
+                  checked={acknowledged}
+                  onCheckedChange={(v) => setAcknowledged(v === true)}
+                  className="mt-0.5"
+                />
+                <span className="text-[11px] text-muted-foreground leading-snug">
+                  I understand PipPilot AI provides educational analysis only — not financial advice — and that I am responsible for the trades I take.
+                </span>
+              </label>
+            )}
+
+            {/* Phase 2 (improvement plan): one-line risk reminder
+                directly above the action so it's the last thing the
+                user sees before committing. */}
+            <p className="text-[10px] text-muted-foreground text-center leading-relaxed">
+              Trading carries significant risk. Past performance does not guarantee future results.
+            </p>
+
             <Button
               type="submit"
               className="w-full"
               disabled={!canSubmit}
             >
-              {createMutation.isPending ? "Opening trade..." : "Open Trade"}
+              {createMutation.isPending
+                ? "Opening trade..."
+                : livePreview?.wouldExceedDailyCap
+                  ? "Blocked — over daily risk cap"
+                  : "Open Trade"}
             </Button>
           </form>
         )}

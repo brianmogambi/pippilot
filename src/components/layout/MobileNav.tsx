@@ -1,15 +1,19 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard, Eye, TrendingUp, Bell, BookOpen, GraduationCap,
+  LayoutDashboard, Eye, TrendingUp, Bell, BookOpen, Calculator,
 } from "lucide-react";
 
+// Phase 6 (improvement plan): Calculator promoted into the mobile
+// nav — beginners reach for sizing far more often than the Learn
+// glossary, and Phase 3's tooltips already cover the in-context
+// glossary need. Learn stays accessible from the desktop sidebar.
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Home" },
   { to: "/watchlist", icon: Eye, label: "Watch" },
   { to: "/signals", icon: TrendingUp, label: "Signals" },
+  { to: "/calculator", icon: Calculator, label: "Sizing" },
   { to: "/alerts", icon: Bell, label: "Alerts" },
   { to: "/journal", icon: BookOpen, label: "Journal" },
-  { to: "/learn", icon: GraduationCap, label: "Learn" },
 ];
 
 export default function MobileNav() {

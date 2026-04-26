@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import RiskCalculator from "@/components/calculator/RiskCalculator";
 import { BookOpen, ShieldCheck, TrendingDown } from "lucide-react";
 
@@ -18,6 +19,16 @@ function consecutiveLossTable() {
 const lossRows = consecutiveLossTable();
 
 export default function CalculatorPage() {
+  // Phase 4 (improvement plan): pre-fill the calculator from query
+  // params so the "Calculate lot size" CTA on a signal card jumps
+  // straight into a relevant calculation.
+  const [params] = useSearchParams();
+  const defaultPair = params.get("pair") ?? undefined;
+  const entryParam = Number(params.get("entry"));
+  const slParam = Number(params.get("sl"));
+  const defaultEntry = Number.isFinite(entryParam) && entryParam > 0 ? entryParam : undefined;
+  const defaultSl = Number.isFinite(slParam) && slParam > 0 ? slParam : undefined;
+
   return (
     <div className="p-4 md:p-6 lg:p-8">
       <div className="mb-6">
@@ -29,7 +40,7 @@ export default function CalculatorPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
         {/* Left — Calculator */}
-        <RiskCalculator />
+        <RiskCalculator defaultPair={defaultPair} defaultEntry={defaultEntry} defaultSl={defaultSl} />
 
         {/* Right — Educational panels */}
         <div className="space-y-5">

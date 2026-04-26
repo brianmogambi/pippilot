@@ -4,9 +4,12 @@ import { Separator } from "@/components/ui/separator";
 import StatusBadge from "@/components/ui/status-badge";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
 import TradeAnalysisCard from "@/components/trades/TradeAnalysisCard";
-import { ArrowUpRight, ArrowDownRight, Pencil, Trash2, ImageIcon, CheckCircle2, XCircle, Star, Link2 } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Pencil, Trash2, ImageIcon, CheckCircle2, XCircle, Star, Link2, Repeat } from "lucide-react";
 import { useDeleteJournalEntry } from "@/hooks/use-journal";
-import { useTradeAnalysisForTrade } from "@/hooks/use-trade-analyses";
+import {
+  useTradeAnalysisForTrade,
+  useRecurringOutcomeCount,
+} from "@/hooks/use-trade-analyses";
 import type { AccountMode } from "@/types/trading";
 import {
   AlertDialog,
@@ -33,6 +36,13 @@ export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit 
   // if any. Hook is called unconditionally to keep hook order stable;
   // it self-disables when entry?.executed_trade_id is falsy.
   const { data: analysis } = useTradeAnalysisForTrade(entry?.executed_trade_id ?? null);
+  // Phase 5 (improvement plan): how many other trades in the last 30
+  // days share this outcome reason — drives the recurring-mistake
+  // badge so the user sees a pattern, not just a one-off.
+  const recurringCount = useRecurringOutcomeCount(
+    entry?.executed_trade_id ?? null,
+    analysis?.primary_outcome_reason ?? null,
+  );
 
   if (!entry) return null;
 
@@ -86,6 +96,18 @@ export default function JournalDetailDrawer({ entry, open, onOpenChange, onEdit 
             )}
             {entry.setup_type && (
               <StatusBadge variant="neutral">{entry.setup_type.replace("_", " ")}</StatusBadge>
+            )}
+            {/* Phase 5 (improvement plan): "you've seen this mistake
+                before" badge. Hidden for non-loss outcomes so winning
+                trades don't get an alarming chip. */}
+            {recurringCount > 0 && (
+              <StatusBadge
+                variant="pending"
+                className="gap-1"
+                title={`Same outcome on ${recurringCount} other trade${recurringCount === 1 ? "" : "s"} in the last 30 days.`}
+              >
+                <Repeat className="h-2.5 w-2.5" /> seen {recurringCount}× recently
+              </StatusBadge>
             )}
           </SheetTitle>
         </SheetHeader>

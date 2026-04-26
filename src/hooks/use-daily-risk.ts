@@ -13,8 +13,14 @@ function startOfTodayISO(): string {
   return d.toISOString();
 }
 
-export function useDailyRiskUsed(): {
+export function useDailyRiskUsed(opts?: {
+  /** Override the account-mode scope. Defaults to the user's default account mode. */
+  accountMode?: AccountMode;
+  /** Override the balance used for the % calculation. Defaults to the default account's balance. */
+  balance?: number;
+}): {
   riskUsedPct: number;
+  riskUsedUsd: number;
   isLoading: boolean;
   pipFreshness: Freshness;
 } {
@@ -23,7 +29,12 @@ export function useDailyRiskUsed(): {
   const { getPipValue, freshness: pipFreshness } = usePipValues();
   // Phase 18.2: scope open-trade risk to the default account's mode so
   // demo positions never inflate the real-account daily-risk gauge.
-  const accountMode: AccountMode = (account?.account_mode as AccountMode) ?? "demo";
+  // Phase 2 (improvement plan): callers can override the mode/balance
+  // when previewing risk for a non-default account (e.g., the take-trade
+  // dialog where the user can pick any of their accounts).
+  const accountMode: AccountMode =
+    opts?.accountMode ?? ((account?.account_mode as AccountMode) ?? "demo");
+  const balance = opts?.balance ?? Number(account?.balance ?? 0);
 
   const { data: trades, isLoading } = useQuery({
     queryKey: ["daily-risk-trades", user?.id, accountMode],
@@ -42,8 +53,8 @@ export function useDailyRiskUsed(): {
     staleTime: 30_000,
   });
 
-  if (!account?.balance || !trades || trades.length === 0) {
-    return { riskUsedPct: 0, isLoading, pipFreshness };
+  if (!balance || !trades || trades.length === 0) {
+    return { riskUsedPct: 0, riskUsedUsd: 0, isLoading, pipFreshness };
   }
 
   const positions: OpenPosition[] = trades
@@ -56,7 +67,7 @@ export function useDailyRiskUsed(): {
       pipValueUSD: getPipValue(t.pair),
     }));
 
-  const totalRiskUsd = calculateOpenRiskUSD(positions);
-  const riskUsedPct = (totalRiskUsd / Number(account.balance)) * 100;
-  return { riskUsedPct, isLoading, pipFreshness };
+  const riskUsedUsd = calculateOpenRiskUSD(positions);
+  const riskUsedPct = (riskUsedUsd / balance) * 100;
+  return { riskUsedPct, riskUsedUsd, isLoading, pipFreshness };
 }

@@ -387,16 +387,35 @@ export default function PairDetail() {
             </div>
           )}
 
-          {/* Section 7 — Alert Controls */}
+          {/* Section 7 — Alert Controls
+              Phase 6 (improvement plan): each toggle now carries a
+              one-line helper so a beginner knows exactly what they're
+              opting into instead of guessing what "confirmation" or
+              "invalidation" mean. */}
           <div className="rounded-lg border border-border bg-card p-4 space-y-3">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Bell className="h-4 w-4 text-primary" /> Alert Controls</h2>
             {[
-              { key: "entry" as const, label: "Notify on entry zone reached" },
-              { key: "confirmation" as const, label: "Notify on confirmation" },
-              { key: "tpsl" as const, label: "Notify on TP / SL / invalidation" },
-            ].map(({ key, label }) => (
-              <div key={key} className="flex items-center justify-between">
-                <span className="text-xs text-foreground">{label}</span>
+              {
+                key: "entry" as const,
+                label: "Notify on entry zone reached",
+                helper: "Fires when price enters the suggested entry band.",
+              },
+              {
+                key: "confirmation" as const,
+                label: "Notify on confirmation",
+                helper: "Fires when the setup confirms (e.g. close above the breakout level).",
+              },
+              {
+                key: "tpsl" as const,
+                label: "Notify on TP / SL / invalidation",
+                helper: "Fires when a take-profit, stop loss, or invalidation level is touched.",
+              },
+            ].map(({ key, label, helper }) => (
+              <div key={key} className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-foreground">{label}</p>
+                  <p className="text-[10px] text-muted-foreground leading-snug">{helper}</p>
+                </div>
                 <Switch checked={alerts[key]} onCheckedChange={() => toggleAlert(key)} />
               </div>
             ))}

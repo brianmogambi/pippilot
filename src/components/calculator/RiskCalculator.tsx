@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -6,9 +7,12 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { TermTooltip } from "@/components/ui/term-tooltip";
 import { Calculator, ShieldAlert, AlertTriangle, Shield } from "lucide-react";
 import { INSTRUMENT_PAIRS, isJpyPair, pipMultiplier } from "@/lib/pip-value";
 import { usePipValue } from "@/hooks/use-pip-value";
+import { useBeginnerMode } from "@/hooks/use-beginner-mode";
+import type { GlossaryTerm } from "@/lib/glossary";
 import {
   calculatePipDistance,
   evaluateTrade,
@@ -22,23 +26,52 @@ import {
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF"] as const;
 const PAIRS = [...INSTRUMENT_PAIRS];
 
+// Phase 3 (improvement plan): risk presets for the calculator. The
+// Beginner preset additionally toggles conservative mode on so the
+// suggested lot is halved — recommended while building consistency.
+type Preset = { id: "beginner" | "standard" | "aggressive"; label: string; riskPct: number; conservative: boolean; reason: string };
+const PRESETS: Preset[] = [
+  { id: "beginner", label: "Beginner", riskPct: 1, conservative: true, reason: "1% risk + halved lot. Survives long losing streaks." },
+  { id: "standard", label: "Standard", riskPct: 2, conservative: false, reason: "2% risk. The industry consensus for active trading." },
+  { id: "aggressive", label: "Aggressive", riskPct: 3, conservative: false, reason: "3% risk. Only for short, well-tested edges." },
+];
+
 interface Props {
+  defaultPair?: string;
   defaultEntry?: number;
   defaultSl?: number;
 }
 
-export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
+export default function RiskCalculator({ defaultPair, defaultEntry, defaultSl }: Props) {
+  const isBeginner = useBeginnerMode();
   const [balance, setBalance] = useState(10_000);
   const [equity, setEquity] = useState(10_000);
   const [currency, setCurrency] = useState<string>("USD");
-  const [pair, setPair] = useState<string>("EUR/USD");
+  const [pair, setPair] = useState<string>(defaultPair && PAIRS.includes(defaultPair) ? defaultPair : "EUR/USD");
   const [entry, setEntry] = useState(defaultEntry ?? 0);
   const [sl, setSl] = useState(defaultSl ?? 0);
   const [slPips, setSlPips] = useState(0);
+  // Phase 3: beginner-mode users default to 1% risk + conservative on so
+  // their first calculation already reflects the preset.
   const [riskPct, setRiskPct] = useState(1);
   const [fixedRisk, setFixedRisk] = useState<number | "">("");
   const [openRisk, setOpenRisk] = useState<number | "">("");
   const [conservative, setConservative] = useState(false);
+
+  // Apply the Beginner preset once after the profile loads.
+  const [presetSeeded, setPresetSeeded] = useState(false);
+  useEffect(() => {
+    if (presetSeeded || !isBeginner) return;
+    setRiskPct(1);
+    setConservative(true);
+    setPresetSeeded(true);
+  }, [isBeginner, presetSeeded]);
+
+  const applyPreset = useCallback((p: Preset) => {
+    setRiskPct(p.riskPct);
+    setConservative(p.conservative);
+    setPresetSeeded(true);
+  }, []);
 
   // Bidirectional SL ↔ pips sync — uses engine helper for parity
   const handleSlChange = useCallback(
@@ -127,6 +160,30 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
         </div>
       </div>
 
+      {/* Phase 3 (improvement plan): one-click risk presets so a
+          beginner doesn't have to internalise risk-% theory before
+          their first trade. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-muted-foreground">Preset:</span>
+        {PRESETS.map((p) => {
+          const active = riskPct === p.riskPct && conservative === p.conservative;
+          return (
+            <Button
+              key={p.id}
+              type="button"
+              variant={active ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => applyPreset(p)}
+              title={p.reason}
+            >
+              {p.label}
+              <span className="ml-1 text-[10px] opacity-70">{p.riskPct}%{p.conservative ? " · half" : ""}</span>
+            </Button>
+          );
+        })}
+      </div>
+
       {/* Inputs */}
       <div className="rounded-lg border border-border bg-card p-5 space-y-4">
         {/* Row 1: Balance + Equity */}
@@ -185,7 +242,7 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
               className="bg-muted border-border"
             />
           </Field>
-          <Field label="Stop Loss" error={errors.stopLoss}>
+          <Field label="Stop Loss" term="stop_loss" error={errors.stopLoss}>
             <Input
               type="number" value={sl || ""}
               onChange={(e) => handleSlChange(Number(e.target.value))}
@@ -193,7 +250,7 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
               className="bg-muted border-border"
             />
           </Field>
-          <Field label="SL (pips)">
+          <Field label="SL (pips)" term="pip">
             <Input
               type="number" value={slPips || ""}
               onChange={(e) => handleSlPipsChange(Number(e.target.value))}
@@ -206,7 +263,9 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
         {/* Row 4: Risk slider + input */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-xs text-muted-foreground">Risk % per Trade</Label>
+            <Label className="text-xs text-muted-foreground">
+              <TermTooltip term="risk_pct">Risk % per Trade</TermTooltip>
+            </Label>
             <span className="text-xs font-mono text-foreground">{riskPct.toFixed(1)}%</span>
           </div>
           <Slider
@@ -241,16 +300,18 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
       <div className="rounded-lg border border-primary/30 bg-primary/5 p-5 space-y-4">
         <h4 className="text-sm font-semibold text-foreground">Results</h4>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <ResultCell label="Max Risk" value={`$${evaluation.riskAmountUSD.toFixed(2)}`} />
+          <ResultCell label="Max Risk" term="risk_pct" value={`$${evaluation.riskAmountUSD.toFixed(2)}`} />
           <ResultCell
             label="Lot Size"
+            term="lot"
             value={canCalc ? evaluation.lotSize.toFixed(2) : "—"}
             sub={canCalc ? `${(evaluation.lotSize * 10).toFixed(1)} mini · ${(evaluation.lotSize * 100).toFixed(0)} micro` : undefined}
             highlight
           />
-          <ResultCell label="Pip Value" value={`$${pipVal.toFixed(2)}/pip`} sub={pipFreshness === "live" ? "live" : "estimated"} />
+          <ResultCell label="Pip Value" term="pip" value={`$${pipVal.toFixed(2)}/pip`} sub={pipFreshness === "live" ? "live" : "estimated"} />
           <ResultCell
             label="Exposure"
+            term="leverage"
             value={canCalc ? `${currency} ${evaluation.exposureUnits.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
           />
         </div>
@@ -266,20 +327,46 @@ export default function RiskCalculator({ defaultEntry, defaultSl }: Props) {
 
 // ── Sub-components ──
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  error,
+  children,
+  term,
+}: {
+  label: React.ReactNode;
+  error?: string;
+  children: React.ReactNode;
+  term?: GlossaryTerm;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Label className="text-xs text-muted-foreground">
+        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+      </Label>
       {children}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
 
-function ResultCell({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
+function ResultCell({
+  label,
+  value,
+  sub,
+  highlight,
+  term,
+}: {
+  label: React.ReactNode;
+  value: string;
+  sub?: string;
+  highlight?: boolean;
+  term?: GlossaryTerm;
+}) {
   return (
     <div className="text-center">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">
+        {term ? <TermTooltip term={term}>{label}</TermTooltip> : label}
+      </p>
       <p className={`text-lg font-bold ${highlight ? "text-primary" : "text-foreground"}`}>{value}</p>
       {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
     </div>

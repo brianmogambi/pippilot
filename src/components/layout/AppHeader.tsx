@@ -3,6 +3,13 @@ import { Bell, Wallet } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTradingAccount } from "@/hooks/use-account";
 import { useUnreadAlertCount } from "@/hooks/use-alerts";
+import { useSignalFreshness } from "@/hooks/use-signals";
+import { FreshnessBadge } from "@/components/ui/status-badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -22,6 +29,11 @@ export default function AppHeader() {
 
   const { data: account } = useTradingAccount();
   const { data: unreadCount = 0 } = useUnreadAlertCount();
+  // Phase 7 (improvement plan): global freshness pill — surfaces the
+  // age of the newest signal so users on any page can see whether
+  // they're looking at live or cached data without hunting for the
+  // per-card badges.
+  const { freshness: signalFreshness, ageLabel: signalAge } = useSignalFreshness();
 
   const initials = (profile?.display_name ?? user?.email ?? "P").charAt(0).toUpperCase();
 
@@ -35,6 +47,41 @@ export default function AppHeader() {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Phase 7 (improvement plan): clickable global freshness pill.
+            Click → popover explains what each level means and when the
+            engine refreshes. */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-secondary/50 px-2 py-1 hover:border-primary/40 transition-colors"
+              aria-label="Data freshness"
+            >
+              <FreshnessBadge freshness={signalFreshness} />
+              <span className="text-[10px] text-muted-foreground">{signalAge}</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3 text-xs" align="end">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+              Data freshness
+            </p>
+            <ul className="space-y-1.5 text-muted-foreground leading-relaxed">
+              <li>
+                <span className="font-medium text-foreground">Live</span> — the newest signal was generated within the last 4 hours.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">Cached</span> — the newest signal is older than 4 hours; market conditions may have shifted since it was created.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">No data</span> — no signals have been generated for your watchlist yet.
+              </li>
+            </ul>
+            <p className="mt-2 text-[10px] text-muted-foreground/80">
+              Signals refresh automatically as the engine cycles through pairs. Re-check the chart on any signal showing a stale banner before acting.
+            </p>
+          </PopoverContent>
+        </Popover>
+
         <div className="hidden sm:flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-1.5">
           <Wallet className="h-3.5 w-3.5 text-primary" />
           <span className="text-xs font-medium text-foreground">${Number(account?.balance ?? 10000).toLocaleString()}</span>

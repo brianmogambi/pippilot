@@ -207,3 +207,38 @@ export function useDeleteJournalEntry() {
     onError: () => toast.error("Failed to delete entry"),
   });
 }
+
+/**
+ * Phase 5 (improvement plan): how many losing trades the user has
+ * journaled on this pair + setup combination in the last 30 days.
+ * Powers the caution strip on SignalDetailDrawer when a recurring
+ * struggle pattern is detected. Mode-agnostic — losses on demo are
+ * still mistakes worth flagging when the user looks at the live signal.
+ */
+export function useRecentSetupLosses(
+  pair: string | null | undefined,
+  setupType: string | null | undefined,
+): { count: number; isLoading: boolean } {
+  const { user } = useAuth();
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const query = useQuery({
+    queryKey: ["recent-setup-losses", user?.id, pair, setupType],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("trade_journal_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("pair", pair!)
+        .eq("setup_type", setupType!)
+        .lt("result_pips", 0)
+        .gte("opened_at", since);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!user && !!pair && !!setupType,
+    staleTime: 60_000,
+  });
+
+  return { count: query.data ?? 0, isLoading: query.isLoading };
+}

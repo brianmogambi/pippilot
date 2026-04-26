@@ -1,6 +1,11 @@
-import { ArrowUpRight, ArrowDownRight, Ban } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Ban, AlertTriangle } from "lucide-react";
 import StatusBadge from "@/components/ui/status-badge";
 import { formatDistanceToNow } from "date-fns";
+import {
+  getSignalAge,
+  getAccountSuitability,
+  getPrimaryRisk,
+} from "@/lib/signal-presentation";
 import type { EnrichedSignal } from "@/pages/Signals";
 
 function computeRRFallback(entry: number, sl: number, tp1: number): number {
@@ -15,6 +20,13 @@ export default function SignalCard({ signal }: { signal: EnrichedSignal }) {
   const quality = signal.analysis?.setupQuality ?? null;
   const rr = signal.riskReward ?? computeRRFallback(signal.entry_price, signal.stop_loss, signal.take_profit_1);
 
+  // Phase 1 (improvement plan): trust signals derived from the
+  // already-persisted analysis fields. Same heuristics drive the
+  // dashboard top-trade card and the detail drawer.
+  const age = getSignalAge(signal);
+  const suitability = getAccountSuitability(signal);
+  const primaryRisk = getPrimaryRisk(signal);
+
   return (
     <div className="rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-colors">
       {/* Top row */}
@@ -23,11 +35,17 @@ export default function SignalCard({ signal }: { signal: EnrichedSignal }) {
           <span className="font-semibold text-foreground">{signal.pair}</span>
           <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">{signal.timeframe}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {quality && (
             <StatusBadge variant={quality === "A+" || quality === "A" ? "bullish" : quality === "B" ? "neutral" : "bearish"}>
               {quality}
             </StatusBadge>
+          )}
+          {suitability.level === "real" && (
+            <StatusBadge variant="bullish" title={suitability.reason}>Real</StatusBadge>
+          )}
+          {suitability.level === "demo_only" && (
+            <StatusBadge variant="pending" title={suitability.reason}>Demo only</StatusBadge>
           )}
           {isNoTrade ? (
             <span className="flex items-center gap-1 text-xs font-medium text-warning">
@@ -45,6 +63,16 @@ export default function SignalCard({ signal }: { signal: EnrichedSignal }) {
       {/* Setup type */}
       {signal.setup_type && (
         <p className="text-[11px] text-muted-foreground mb-2">{signal.setup_type}</p>
+      )}
+
+      {/* Primary risk one-liner */}
+      {primaryRisk && (
+        <div className="flex items-start gap-1 mb-2">
+          <AlertTriangle className="h-3 w-3 text-warning mt-0.5 shrink-0" />
+          <p className="text-[10px] text-muted-foreground leading-snug truncate" title={primaryRisk}>
+            <span className="text-warning font-medium">Could fail: </span>{primaryRisk}
+          </p>
+        </div>
       )}
 
       {/* Price levels */}
@@ -80,6 +108,14 @@ export default function SignalCard({ signal }: { signal: EnrichedSignal }) {
           >
             {signal.status}
           </StatusBadge>
+          {age.staleness !== "fresh" && (
+            <StatusBadge
+              variant={age.staleness === "stale" ? "bearish" : "pending"}
+              title={`Generated ${age.label} — market conditions may have changed.`}
+            >
+              {age.staleness === "stale" ? "Stale" : "Aging"}
+            </StatusBadge>
+          )}
           <span className="text-[10px] text-muted-foreground">
             {formatDistanceToNow(new Date(signal.created_at), { addSuffix: true })}
           </span>

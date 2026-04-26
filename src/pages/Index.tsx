@@ -1,21 +1,39 @@
 import { useState } from "react";
-import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, AlertTriangle, BookOpen, Activity, Lightbulb, BarChart3, Clock, Circle, X, Zap, ChevronDown, ChevronUp } from "lucide-react";
-import { Link } from "react-router-dom";
+import { ArrowUpRight, ArrowDownRight, TrendingUp, Shield, Wallet, AlertTriangle, BookOpen, Activity, Lightbulb, BarChart3, Clock, Circle, X, Zap, ChevronDown, ChevronUp, Calculator, Check } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useTradingAccount,
+  useTradingAccounts,
   useRiskProfile,
   useDefaultAccountMode,
+  useUpdateTradingAccount,
 } from "@/hooks/use-account";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import WelcomeStrip from "@/components/dashboard/WelcomeStrip";
 import { useEnrichedActiveSignals, useSignalFreshness } from "@/hooks/use-signals";
 import { useDashboardAlerts } from "@/hooks/use-alerts";
 import { useDashboardJournal, useDashboardJournalStats } from "@/hooks/use-journal";
+import { useRecentLessons } from "@/hooks/use-trade-analyses";
 import AccountModeBadge from "@/components/ui/account-mode-badge";
 import { useDashboardWatchlist } from "@/hooks/use-watchlist";
 import { useMarketSummary, useAllMarketData } from "@/hooks/use-market-data";
+import { useRefreshMarketData } from "@/hooks/use-refresh-market-data";
 import { useDailyRiskUsed } from "@/hooks/use-daily-risk";
 import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { freshnessOf, type Freshness } from "@/lib/data-freshness";
+import {
+  getSignalAge,
+  getPrimaryRisk,
+  getAccountSuitability,
+  getPotentialLoss,
+} from "@/lib/signal-presentation";
+import { TermTooltip } from "@/components/ui/term-tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import type { AccountMode, EnrichedSignal } from "@/types/trading";
@@ -32,17 +50,35 @@ const beginnerTips = [
 
 // ── Top Trade Hero Card ────────────────────────────────────────
 
-function TopTradeCard({ signal }: { signal: EnrichedSignal }) {
+function TopTradeCard({
+  signal,
+  balance,
+  riskPct,
+}: {
+  signal: EnrichedSignal;
+  balance: number;
+  riskPct: number;
+}) {
+  const navigate = useNavigate();
   const isLong = signal.direction === "long";
   const quality = signal.analysis?.setupQuality ?? null;
   const rr = signal.riskReward;
+
+  // Phase 1 (improvement plan): trust signals derived from the
+  // already-persisted analysis fields. Heuristics live in the pure
+  // signal-presentation module so they stay testable and consistent
+  // across surfaces.
+  const age = getSignalAge(signal);
+  const suitability = getAccountSuitability(signal);
+  const primaryRisk = getPrimaryRisk(signal);
+  const potentialLoss = getPotentialLoss(balance, riskPct);
 
   return (
     <Link
       to={`/signals/${signal.id}`}
       className="block rounded-lg border-2 border-primary/40 bg-gradient-to-br from-primary/5 via-card to-card p-4 hover:border-primary/60 transition-all"
     >
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Zap className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold text-primary uppercase tracking-wide">Top Trade Idea</span>
         {quality && (
@@ -50,10 +86,30 @@ function TopTradeCard({ signal }: { signal: EnrichedSignal }) {
             {quality}
           </StatusBadge>
         )}
-        <FreshnessBadge
-          freshness={signal.confidence >= 70 ? "live" : "cached"}
-          title={`${signal.confidence}% confidence`}
-        />
+        {age.staleness !== "fresh" && (
+          <StatusBadge
+            variant={age.staleness === "stale" ? "bearish" : "pending"}
+            title={`Generated ${age.label} — market conditions may have shifted.`}
+          >
+            {age.staleness === "stale" ? "Stale" : "Aging"}
+          </StatusBadge>
+        )}
+        <span className="text-[10px] text-muted-foreground">{age.label}</span>
+        {suitability.level === "real" && (
+          <StatusBadge variant="bullish" title={suitability.reason}>
+            Real-account suitable
+          </StatusBadge>
+        )}
+        {suitability.level === "demo_only" && (
+          <StatusBadge variant="pending" title={suitability.reason}>
+            Demo only
+          </StatusBadge>
+        )}
+        {suitability.level === "no_trade" && (
+          <StatusBadge variant="bearish" title={suitability.reason}>
+            No trade
+          </StatusBadge>
+        )}
       </div>
 
       <div className="flex items-center justify-between mb-3">
@@ -76,20 +132,49 @@ function TopTradeCard({ signal }: { signal: EnrichedSignal }) {
           <p className="text-sm font-mono font-semibold text-foreground">{signal.entry_price}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground mb-0.5">Stop Loss</p>
+          <p className="text-[10px] text-muted-foreground mb-0.5">
+            <TermTooltip term="stop_loss">Stop Loss</TermTooltip>
+          </p>
           <p className="text-sm font-mono font-semibold text-bearish">{signal.stop_loss}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground mb-0.5">TP1</p>
+          <p className="text-[10px] text-muted-foreground mb-0.5">
+            <TermTooltip term="take_profit">TP1</TermTooltip>
+          </p>
           <p className="text-sm font-mono font-semibold text-bullish">{signal.take_profit_1}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground mb-0.5">R:R</p>
+          <p className="text-[10px] text-muted-foreground mb-0.5">
+            <TermTooltip term="risk_reward">R:R</TermTooltip>
+          </p>
           <p className="text-sm font-mono font-semibold text-primary">{rr.toFixed(2)}R</p>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
+      {primaryRisk && (
+        <div className="mt-3 flex items-start gap-1.5 rounded-md border border-warning/20 bg-warning/[0.06] px-2.5 py-1.5">
+          <AlertTriangle className="h-3 w-3 text-warning mt-0.5 shrink-0" />
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            <span className="font-medium text-warning">Could fail if: </span>
+            {primaryRisk}
+          </p>
+        </div>
+      )}
+
+      {/* Phase 4 (improvement plan): stale-signal banner — flags
+          signals >6h old so a beginner doesn't act on a setup whose
+          market context has already shifted. */}
+      {age.staleness === "stale" && (
+        <div className="mt-2 flex items-start gap-1.5 rounded-md border border-bearish/30 bg-bearish/[0.06] px-2.5 py-1.5">
+          <AlertTriangle className="h-3 w-3 text-bearish mt-0.5 shrink-0" />
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            <span className="font-medium text-bearish">Stale signal: </span>
+            generated {age.label} — market conditions may have shifted. Re-check the chart before acting.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="w-20 bg-muted rounded-full h-1.5">
             <div
@@ -97,11 +182,108 @@ function TopTradeCard({ signal }: { signal: EnrichedSignal }) {
               style={{ width: `${signal.confidence}%` }}
             />
           </div>
-          <span className="text-xs text-muted-foreground">{signal.confidence}% confidence</span>
+          <span className="text-xs text-muted-foreground">
+            {signal.confidence}% <TermTooltip term="confidence">confidence</TermTooltip>
+          </span>
         </div>
+        {potentialLoss && (
+          <span className="text-[11px] text-muted-foreground">
+            ≈ <span className="font-mono font-semibold text-foreground">${potentialLoss.riskUsd.toFixed(0)}</span> at <TermTooltip term="risk_pct">risk</TermTooltip> ({potentialLoss.pctOfAccount}%)
+          </span>
+        )}
+        {/* Phase 4: shortcut to calculator pre-filled with this trade's
+            pair/entry/SL so the user can play with sizing without
+            re-typing it. Rendered as a button (not <Link>) to avoid
+            nested anchors — the card root already wraps everything in
+            a <Link>, so we navigate programmatically on click. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate(
+              `/calculator?pair=${encodeURIComponent(signal.pair)}&entry=${signal.entry_price}&sl=${signal.stop_loss}`,
+            );
+          }}
+          className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+        >
+          <Calculator className="h-3 w-3" /> Calculate lot size
+        </button>
         <span className="text-xs text-primary font-medium">View details →</span>
       </div>
     </Link>
+  );
+}
+
+// ── Account Switcher (Phase 4) ─────────────────────────────────
+
+function AccountSwitcher({ mode }: { mode: AccountMode }) {
+  const { data: accounts = [] } = useTradingAccounts();
+  const updateAccount = useUpdateTradingAccount();
+  const [open, setOpen] = useState(false);
+
+  // Switch the user's default account by un-flagging the current
+  // default and flagging the new one. Two sequential updates rather
+  // than a transaction — the hook invalidates the relevant queries
+  // so the UI reflects the change as soon as both calls land.
+  const handleSwitch = async (targetId: string) => {
+    const current = accounts.find((a) => a.is_default);
+    if (current?.id === targetId) {
+      setOpen(false);
+      return;
+    }
+    if (current) {
+      await updateAccount.mutateAsync({ id: current.id, payload: { is_default: false } });
+    }
+    await updateAccount.mutateAsync({ id: targetId, payload: { is_default: true } });
+    setOpen(false);
+  };
+
+  // Single-account users: badge stays static (nothing to switch to).
+  if (accounts.length <= 1) {
+    return <AccountModeBadge mode={mode} size="md" className="shrink-0" />;
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 rounded-md hover:ring-1 hover:ring-primary/30 transition"
+          aria-label="Switch default account"
+        >
+          <AccountModeBadge mode={mode} size="md" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2" align="start">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold px-2 py-1">
+          Switch default account
+        </p>
+        <div className="space-y-1">
+          {accounts.map((a) => {
+            const isCurrent = a.is_default;
+            const accMode: AccountMode = (a.account_mode as AccountMode) ?? "demo";
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => handleSwitch(a.id)}
+                disabled={updateAccount.isPending}
+                className={`w-full flex items-center justify-between gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted/60 ${
+                  isCurrent ? "bg-muted/40" : ""
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <AccountModeBadge mode={accMode} size="sm" />
+                  <span className="truncate text-foreground">{a.account_name}</span>
+                </div>
+                {isCurrent && <Check className="h-3 w-3 text-primary shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -121,8 +303,9 @@ function AccountBar({
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-2.5 text-sm overflow-x-auto">
       {/* Phase 18.8: mode badge anchors the bar so the trader always
-          sees at a glance whether they are looking at demo or real. */}
-      <AccountModeBadge mode={accountMode} size="md" className="shrink-0" />
+          sees at a glance whether they are looking at demo or real.
+          Phase 4: clickable when the user has multiple accounts. */}
+      <AccountSwitcher mode={accountMode} />
       <div className="flex items-center gap-1.5 shrink-0">
         <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-muted-foreground">Bal</span>
@@ -139,7 +322,9 @@ function AccountBar({
       <div className="h-4 w-px bg-border shrink-0" />
       <div className="flex items-center gap-1.5 shrink-0">
         <Shield className={`h-3.5 w-3.5 ${riskRemaining <= 1 ? "text-bearish" : "text-muted-foreground"}`} />
-        <span className="text-muted-foreground">Risk</span>
+        <span className="text-muted-foreground">
+          <TermTooltip term="risk_pct">Risk</TermTooltip>
+        </span>
         <span className={`font-semibold ${riskRemaining <= 1 ? "text-bearish" : riskRemaining <= 2 ? "text-warning" : "text-foreground"}`}>
           {riskUsed}%
         </span>
@@ -176,19 +361,27 @@ const Dashboard = () => {
   const { data: alerts = [] } = useDashboardAlerts(5);
   const { data: journalEntries = [] } = useDashboardJournal(3, defaultMode);
   const { data: journalStats } = useDashboardJournalStats(defaultMode);
+  // Phase 5 (improvement plan): last 3 distinct improvement actions
+  // surfaced from the post-trade rule engine. Mode-scoped so demo
+  // lessons don't leak into a real-account dashboard view.
+  const { data: recentLessons } = useRecentLessons(defaultMode, 3);
   const { data: watchlist = [] } = useDashboardWatchlist(6);
   const marketSummary = useMarketSummary();
   const { data: marketDataMap } = useAllMarketData();
+  const refreshMarketData = useRefreshMarketData();
   const { freshness: signalFreshness, ageLabel: signalAge } = useSignalFreshness();
   const { riskUsedPct } = useDailyRiskUsed();
   const [tipDismissed, setTipDismissed] = useState(false);
-  const [journalExpanded, setJournalExpanded] = useState(false);
+  // Phase 4 (improvement plan): journal stats are too valuable to
+  // hide behind a chevron. Default expanded; user can collapse.
+  const [journalExpanded, setJournalExpanded] = useState(true);
 
   const isLoading = loadingAccount || loadingSignals;
 
   const hasAccount = account && Number(account.balance) > 0;
   const balance = Number(account?.balance ?? 0);
   const equity = Number(account?.equity ?? 0);
+  const riskPerTradePct = Number(riskProfile?.risk_per_trade_pct ?? 1);
   const maxDailyRisk = riskProfile?.max_daily_loss_pct ?? 5;
   const riskUsed = Math.round(riskUsedPct * 10) / 10;
   const riskRemaining = Math.max(0, Number(maxDailyRisk) - riskUsed);
@@ -264,9 +457,13 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Phase 4 (improvement plan): "what to do today" 4-step strip
+          for first-time / beginner users. Dismissable per session. */}
+      <WelcomeStrip />
+
       {/* 2. Top Trade Hero */}
       {topTrade ? (
-        <TopTradeCard signal={topTrade} />
+        <TopTradeCard signal={topTrade} balance={balance} riskPct={riskPerTradePct} />
       ) : (
         <div className="rounded-lg border border-border bg-card p-6 text-center">
           <TrendingUp className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
@@ -408,7 +605,14 @@ const Dashboard = () => {
                   />
                 )}
               </div>
-              <Link to="/watchlist" className="text-xs text-primary hover:underline">View all →</Link>
+              <div className="flex items-center gap-3">
+                <RefreshButton
+                  onClick={() => refreshMarketData.mutate()}
+                  isPending={refreshMarketData.isPending}
+                  title="Fetch the latest forex prices now"
+                />
+                <Link to="/watchlist" className="text-xs text-primary hover:underline">View all →</Link>
+              </div>
             </div>
             <div className="rounded-lg border border-border bg-card divide-y divide-border">
               {watchPairs.length === 0 && (
@@ -520,6 +724,33 @@ const Dashboard = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Phase 5 (improvement plan): Recent lessons —
+                    distinct improvement actions surfaced from
+                    trade_analyses on this user's recent trades.
+                    Empty state hidden so the panel doesn't grow with
+                    a placeholder when no analysis exists yet. */}
+                {recentLessons && recentLessons.length > 0 && (
+                  <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      <Lightbulb className="h-3 w-3 text-primary" />
+                      Recent lessons
+                    </div>
+                    <ul className="space-y-1.5">
+                      {recentLessons.map((lesson) => (
+                        <li key={lesson.id} className="flex items-start gap-1.5">
+                          <span className="text-muted-foreground/50 mt-0.5">•</span>
+                          <p className="text-xs text-muted-foreground leading-snug">
+                            {lesson.pair && (
+                              <span className="font-medium text-foreground">{lesson.pair}: </span>
+                            )}
+                            {lesson.action}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Tip */}
                 {!tipDismissed && (

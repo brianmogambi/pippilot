@@ -79,7 +79,7 @@ export function useUpdateTradingAccount() {
       payload: Partial<
         Pick<
           TradingAccount,
-          "account_mode" | "account_name" | "broker_name" | "balance" | "equity"
+          "account_mode" | "account_name" | "broker_name" | "balance" | "equity" | "is_default"
         >
       >;
     }) => {

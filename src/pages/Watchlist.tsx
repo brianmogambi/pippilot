@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Star, Plus, Search, AlertTriangle, TrendingUp, TrendingDown, Minus, ArrowRight, Eye } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useWatchlist, useInstruments, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/use-watchlist";
 import { useActiveSignals } from "@/hooks/use-signals";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,7 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import EmptyState from "@/components/ui/empty-state";
 import StatusBadge, { FreshnessBadge } from "@/components/ui/status-badge";
+import { RefreshButton } from "@/components/ui/refresh-button";
+import { TermTooltip } from "@/components/ui/term-tooltip";
 import { useAllMarketData } from "@/hooks/use-market-data";
+import { useRefreshMarketData } from "@/hooks/use-refresh-market-data";
 import type { MarketData, TrendDirection } from "@/types/trading";
 import { freshnessOf, type Freshness } from "@/lib/data-freshness";
 
@@ -37,6 +40,7 @@ export default function Watchlist() {
   const { data: liveMarketData } = useAllMarketData();
   const addMutation = useAddToWatchlist();
   const removeMutation = useRemoveFromWatchlist();
+  const refreshMarketData = useRefreshMarketData();
 
   const favSet = useMemo(() => new Set(watchlist.map((w) => w.pair)), [watchlist]);
   const signalMap = useMemo(() => {
@@ -118,6 +122,12 @@ export default function Watchlist() {
           <p className="text-sm text-muted-foreground mt-0.5">Monitor instruments, trends, and trading opportunities</p>
         </div>
         <div className="flex items-center gap-2">
+          <RefreshButton
+            onClick={() => refreshMarketData.mutate()}
+            isPending={refreshMarketData.isPending}
+            label="Refresh"
+            title="Fetch the latest forex prices now"
+          />
           <Select value={newPair} onValueChange={setNewPair}>
             <SelectTrigger className="w-36 h-8 text-xs"><SelectValue placeholder="Add pair…" /></SelectTrigger>
             <SelectContent>
@@ -196,12 +206,22 @@ export default function Watchlist() {
                   <TableHead className="w-10"></TableHead>
                   <TableHead className="text-xs">Pair</TableHead>
                   <TableHead className="text-xs text-right">Price</TableHead>
-                  <TableHead className="text-xs text-right">Spread</TableHead>
+                  <TableHead className="text-xs text-right">
+                    <TermTooltip term="spread">Spread</TermTooltip>
+                  </TableHead>
                   <TableHead className="text-xs text-right">Change</TableHead>
-                  <TableHead className="text-xs text-center">Volatility</TableHead>
-                  <TableHead className="text-xs text-center">Session</TableHead>
-                  <TableHead className="text-xs text-center">Trend</TableHead>
-                  <TableHead className="text-xs text-center">Signal</TableHead>
+                  <TableHead className="text-xs text-center">
+                    <TermTooltip term="volatility">Volatility</TermTooltip>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <TermTooltip term="session">Session</TermTooltip>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <TermTooltip term="trend">Trend</TermTooltip>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <TermTooltip term="confidence">Signal</TermTooltip>
+                  </TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -267,9 +287,22 @@ export default function Watchlist() {
                     </TableCell>
                     <TableCell className="text-center">
                       {r.signal ? (
-                        <StatusBadge variant={r.signal.direction === "long" ? "bullish" : "bearish"}>
-                          {r.signal.direction === "long" ? "▲" : "▼"} {r.signal.confidence}%
-                        </StatusBadge>
+                        // Phase 6 (improvement plan): clicking the
+                        // signal badge jumps straight to the signal
+                        // detail page instead of forcing the user to
+                        // re-find the signal on /signals. stopPropagation
+                        // so the row's pair-detail navigation doesn't
+                        // also fire.
+                        <Link
+                          to={`/signals/${r.signal.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-block hover:opacity-80"
+                          title="View signal detail"
+                        >
+                          <StatusBadge variant={r.signal.direction === "long" ? "bullish" : "bearish"}>
+                            {r.signal.direction === "long" ? "▲" : "▼"} {r.signal.confidence}%
+                          </StatusBadge>
+                        </Link>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">—</span>
                       )}

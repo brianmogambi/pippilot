@@ -12,15 +12,17 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Dashboard** | "Top Trade" hero card surfacing highest-quality signal, quality-sorted active signals, account bar, market watch, collapsible journal & tips |
-| **Market Watch** | Monitor 16 forex instruments with live prices, spread, volatility, multi-timeframe trends, and session data |
-| **Signal Explorer** | Browse algorithmically-generated trade setups with confidence scores, quality grades (A+/A/B/C), R:R ratios, freshness indicators, and AI-written explanations |
-| **Risk Calculator** | Position sizing with risk %, conservative mode, exposure warnings, and daily loss tracking |
+| **Dashboard** | "Top Trade" hero card with trust signals (signal age, primary risk, account suitability, potential loss), 4-step "what to do today" welcome strip, quality-sorted signals, account bar with multi-account switcher, market watch, expanded journal stats, recent lessons widget |
+| **Market Watch** | Monitor 16 forex instruments with live prices, spread, volatility, multi-timeframe trends, and session data — column headers carry glossary tooltips, signal badges link directly to the signal detail |
+| **Signal Explorer** | Browse algorithmically-generated trade setups with confidence scores, quality grades (A+/A/B/C), R:R ratios, age + staleness chips, suitability tags, AI explanations, "why this could fail" callouts, and recurring-mistake awareness |
+| **Risk Calculator** | Position sizing with one-click presets (Beginner 1%/half · Standard 2% · Aggressive 3%), conservative mode, exposure warnings, daily loss tracking, glossary tooltips on every label, query-param pre-fill from any signal |
+| **Take-Trade Dialog** | Live risk preview (potential loss in $, % of account, daily-budget used vs. cap), hard-block on over-cap submissions, conservative-mode override, per-session educational-not-advice acknowledgment |
 | **Alerts Center** | Notifications for signal events and market conditions with severity levels (event-aware deduplication) |
-| **Trade Journal** | Log trades with entry/exit, emotions, lessons learned, and performance stats |
-| **Pair Detail** | Deep-dive analysis per pair: live OHLCV chart, key levels, structure, AI reasoning, signal & journal history |
+| **Trade Journal** | Log trades with entry/exit, emotions, lessons learned, post-trade rule-engine analysis, recurring-mistake badges when an outcome reason repeats |
+| **Pair Detail** | Deep-dive analysis per pair: live OHLCV chart, key levels, structure, AI reasoning, signal & journal history, per-toggle helper text on alert controls |
 | **Live Charts** | Real candlestick charts (5m / 15m / 1H / 4H / 1D) with EMA overlays, on-chart entry/SL/TP price lines, and signal markers |
-| **Data Freshness** | Auto-refresh on login, 2-minute polling, server-side cron scheduling, freshness badges (**Live** / **Cached** / **Demo**) across all widgets |
+| **Data Freshness** | Auto-refresh on login, 2-minute polling, server-side cron scheduling, freshness badges across widgets, **global freshness pill in the header** that explains Live / Cached / No-data states on click |
+| **Beginner Mode** | Triggered by `profile.experience_level === "beginner"`. Glossary tooltips on jargon (R:R, pip, lot, drawdown, leverage, etc.), longer-form explanations, calculator preset auto-applied, beginner-friendly badge on qualifying signals |
 | **Broker Integration** | Read-only broker account sync (adapter pattern) — view positions, orders, equity snapshots without execution |
 | **Settings** | Profile, preferred pairs/sessions/strategies, risk parameters, notifications |
 | **Admin Review** | Role-based panel for reviewing and tagging AI-generated signals (quality control) |
@@ -40,7 +42,7 @@
 | AI | Claude Haiku via Anthropic API (explanation layer only — versioned prompts) |
 | Auth | Email/password with verification |
 | Scheduling | pg_cron + pg_net (server-side Edge Function invocation) |
-| Testing | Vitest (113 tests across pure engine modules) |
+| Testing | Vitest (294 tests across pure engine + presentation modules) |
 
 ## Architecture
 
@@ -57,9 +59,11 @@ Frontend (React SPA)
   │    ├── alert-engine       — event-aware alert evaluation + deduplication
   │    ├── explanation-service — versioned-prompt AI/template fallback
   │    ├── data-freshness    — Live/Cached/Demo classification + signal freshness
+  │    ├── signal-presentation — beginner-friendly tag, account suitability, age, primary risk
+  │    ├── glossary           — typed glossary of trading terms (short + long descriptions)
   │    ├── indicators         — EMA/RSI/ATR/MACD/BB
   │    └── chart-colors       — chart palette
-  └── Components (chart, calculator, journal, signals, ui, …)
+  └── Components (chart, calculator, dashboard/WelcomeStrip, journal, signals, ui, …)
 
 Backend (Supabase)
   ├── Tables: profiles, trading_accounts, user_risk_profiles, signals,
@@ -191,9 +195,10 @@ supabase/
 - ✅ Learn hub (7 sections) with glossary and FAQ search
 - ✅ Settings with profile, preferences, risk params, notifications
 - ✅ Admin review panel (role-based)
+- ✅ **UX Improvement Plan v1** (8 phases) — signal trust layer, risk-before-trade safety, beginner mode, dashboard guided flow, journal learning loop, navigation glue, disclaimer placement, architecture polish — see [UX_IMPROVEMENT_PLAN.md](docs/UX_IMPROVEMENT_PLAN.md)
 - ✅ Error boundary + strict null checks + FK constraints with CASCADE
 - ✅ Dark-first glassmorphic UI
-- ✅ **113 vitest tests** across pure engine modules
+- ✅ **294 vitest tests** across pure engine + presentation modules
 
 ## Phase History
 
@@ -215,19 +220,22 @@ supabase/
 | 15 | Data freshness pipeline (pg_cron scheduling, auto-refresh, polling, freshness indicators) | ✅ Done |
 | 16 | Dashboard redesign (Top Trade hero, quality sorting, compact layout) | ✅ Done |
 | 17 | Chart fix (always-mount container, Supabase types for candle tables, JWT config) | ✅ Done |
+| 18 | Trade execution flow + post-trade rule analysis + trade analytics (sub-phases 18.1–18.10) | ✅ Done |
+| **UX v1** | Signal trust layer, risk-before-trade safety, beginner mode, dashboard guided flow, journal learning loop, navigation glue, disclaimer placement, architecture polish — see [docs/UX_IMPROVEMENT_PLAN.md](docs/UX_IMPROVEMENT_PLAN.md) | ✅ Done |
 
 ## Future Roadmap
 
 | Phase | Focus |
 |-------|-------|
-| **Phase 18** | Analytics surface (user-facing dashboards backed by `useLiveSignalAnalytics`) |
 | **Phase 19** | Confidence recalibration (only if analytics calibration data justifies it) |
-| **Phase 20** | Broker execution layer (optional, requires full security audit) |
+| **Phase 20** | Lift the UX v1 client-side heuristics (`signal-presentation`) into the Edge Function as `pair_analyses` columns once they prove out against real journal data |
+| **Phase 21** | Broker execution layer (optional, requires full security audit) |
 
 ## Documentation
 
 Full documentation suite available in `/docs/`:
 - **`SYSTEM_ARCHITECTURE.md`** — End-to-end technical architecture (pipeline, Edge Functions, signal engine, AI layer, tables, data flow)
+- **`UX_IMPROVEMENT_PLAN.md`** — 8-phase UX v1 plan (trust signals, beginner mode, learning loop) and what each phase shipped
 - `USER_GUIDE.md` — Beginner-friendly walkthrough
 - `FEATURES_SPEC.md` — Detailed feature breakdown
 - `DATABASE_SCHEMA.md` — All tables, fields, RLS policies
